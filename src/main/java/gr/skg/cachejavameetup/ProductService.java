@@ -1,20 +1,25 @@
 package gr.skg.cachejavameetup;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.springframework.stereotype.Service;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.time.Duration;
 
 @Service
 public class ProductService {
    private final ProductRepository productRepository;
-   // Simple Cache, but thread safe
-   private final Map<Long, Product> cache = new ConcurrentHashMap<>();
+   // Local cache with Caffeine
+   Cache<Long, Product> cache = Caffeine.newBuilder()
+         .maximumSize(10)
+         .expireAfterWrite(Duration.ofMinutes(1)) // keep for a fixed duration
+         // .expireAfterAccess(Duration.ofMinutes(1)) // keep frequently accessed data
+         .build();
 
    public ProductService(ProductRepository productRepository) {this.productRepository = productRepository;}
 
    public Product getProduct(Long id) {
       // Thread Safe operation, and more elegant
-      return cache.computeIfAbsent(id, productRepository::findById);
+      return cache.get(id, productRepository::findById);
    }
 }
