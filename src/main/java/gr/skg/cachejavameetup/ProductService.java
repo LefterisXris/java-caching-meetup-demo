@@ -14,6 +14,10 @@ public class ProductService {
          .maximumSize(10)
          .expireAfterWrite(Duration.ofMinutes(1)) // keep for a fixed duration
          // .expireAfterAccess(Duration.ofMinutes(1)) // keep frequently accessed data
+         .evictionListener((key, value, cause) -> {
+            System.out.println("Evicting product: " + key);
+         })
+         .recordStats()
          .build();
 
    public ProductService(ProductRepository productRepository) {this.productRepository = productRepository;}
