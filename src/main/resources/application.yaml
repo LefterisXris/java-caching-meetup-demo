@@ -2,6 +2,6 @@ spring:
   application:
     name: cache-java-meetup
   cache:
-    type: caffeine
-    caffeine:
-      spec: maximumSize=10,expireAfterWrite=1m,recordStats
+    type: redis
+    redis:
+      time-to-live: 1m
