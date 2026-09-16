@@ -2,4 +2,6 @@ spring:
   application:
     name: cache-java-meetup
   cache:
-    type: simple
+    type: caffeine
+    caffeine:
+      spec: maximumSize=10,expireAfterWrite=1m,recordStats
