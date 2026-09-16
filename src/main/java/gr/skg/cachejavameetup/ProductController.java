@@ -5,8 +5,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Set;
-
 @RestController
 @RequestMapping("/products")
 class ProductController {
@@ -17,11 +15,6 @@ class ProductController {
    @GetMapping("/{id}")
    public Product findById(@PathVariable Long id) {
       return productService.getProduct(id);
-   }
-
-   @GetMapping("/cache")
-   public Set<String> cacheKeys() {
-      return productService.cacheKeys();
    }
 
 }
