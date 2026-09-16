@@ -1,34 +1,38 @@
 package gr.skg.cachejavameetup;
 
-import com.github.benmanes.caffeine.cache.Caffeine;
-import com.github.benmanes.caffeine.cache.LoadingCache;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.Set;
 
 @Service
 public class ProductService {
    private final ProductRepository productRepository;
-   // Loading cache with Caffeine
-   final LoadingCache<Long, Product> cache;
+   // Shared Cache - Redis
+   private final RedisTemplate<String, Product> redisTemplate;
 
-   public ProductService(ProductRepository productRepository) {
+   public ProductService(ProductRepository productRepository,
+                         RedisTemplate<String, Product> redisTemplate) {
       this.productRepository = productRepository;
-      this.cache = Caffeine.newBuilder()
-            .maximumSize(10)
-            .refreshAfterWrite(Duration.ofSeconds(10)) // refresh is useful, to keep data "fresh"
-            .expireAfterWrite(Duration.ofMinutes(1)) // keep for a fixed duration
-            // .expireAfterAccess(Duration.ofMinutes(1)) // keep frequently accessed data
-            .evictionListener((key, value, cause) -> {
-               System.out.println("Evicting product: " + key);
-            })
-            .recordStats()
-            .build(productRepository::findById);
+      this.redisTemplate = redisTemplate;
    }
 
    public Product getProduct(Long id) {
-      // The cache now knows how to obtain a missing value.
-      return cache.get(id);
+      String key = "product:" + id;
+
+      Product cached = redisTemplate.opsForValue().get(key);
+      if (cached != null) {
+         return cached;
+      }
+
+      Product product = productRepository.findById(id);
+      redisTemplate.opsForValue().set(key, product, Duration.ofMinutes(10));
+      return product;
+   }
+
+   public Set<String> cacheKeys() {
+      return redisTemplate.keys("product:*");
    }
 
 }

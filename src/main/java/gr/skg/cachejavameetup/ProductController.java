@@ -5,8 +5,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/products")
@@ -21,12 +20,8 @@ class ProductController {
    }
 
    @GetMapping("/cache")
-   public Map<Long, Product> cacheContents() {
-      return new HashMap<>(productService.cache.asMap());
+   public Set<String> cacheKeys() {
+      return productService.cacheKeys();
    }
 
-   @GetMapping("/cache/stats")
-   public String cacheStats() {
-      return productService.cache.stats().toString();
-   }
 }
