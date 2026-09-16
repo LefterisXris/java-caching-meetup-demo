@@ -16,4 +16,7 @@ public class ProductService {
       return productRepository.findById(id);
    }
 
+   public Product update(Long id, Double newPrice) {
+      return productRepository.update(id, newPrice);
+   }
 }

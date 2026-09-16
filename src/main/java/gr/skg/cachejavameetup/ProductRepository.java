@@ -44,4 +44,13 @@ class ProductRepository {
          throw new RuntimeException(e);
       }
    }
+
+   public Product update(Long id, Double newPrice) {
+      Product product = findById(id); // not needed, but just for the 'delay' and 'not found'
+
+      // simulating atomic DB operation
+      return db.computeIfPresent(id,
+            (key, existing)
+                  -> new Product(existing.id(), existing.name(), newPrice));
+   }
 }
