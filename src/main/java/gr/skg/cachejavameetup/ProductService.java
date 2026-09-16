@@ -1,5 +1,6 @@
 package gr.skg.cachejavameetup;
 
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
@@ -16,6 +17,7 @@ public class ProductService {
       return productRepository.findById(id);
    }
 
+   @CacheEvict(cacheNames = "products", key = "#id")
    public Product update(Long id, Double newPrice) {
       return productRepository.update(id, newPrice);
    }
