@@ -121,7 +121,7 @@ A comprehensive step-by-step guide for reproducing this workshop is hosted on Gi
 
 **[https://lefterisxris.github.io/java-caching-meetup-demo/workshop-guide.html](https://lefterisxris.github.io/java-caching-meetup-demo/workshop-guide.html)**
 
-The source lives in the [`docs/`](docs/) directory. `workshop-guide.md` is the source of truth (it renders on GitHub as well); `workshop-guide.html` is generated from it with `python docs/build/build_guide.py` (needs `pip install markdown pygments`).
+The source lives in the [`docs/`](docs/) directory. `workshop-guide.md` is the source of truth (it renders on GitHub as well); `workshop-guide.html` is generated from it with `python docs/generator/build_guide.py` (needs `pip install markdown pygments`).
 
 ## Resources
 
