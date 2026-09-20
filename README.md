@@ -6,7 +6,7 @@ One deliberately slow endpoint (`GET /products/{id}`, one second per call) is ma
 
 <div align="center">
 
-[![Workshop Guide](https://img.shields.io/badge/%F0%9F%93%96_Workshop_Guide-Read_the_step--by--step_tutorial-EA580C?style=for-the-badge&logo=spring&logoColor=white)](https://lefterisxris.github.io/java-caching-meetup-demo/workshop-guide.html)
+[![Workshop Guide](https://img.shields.io/badge/%F0%9F%93%96_Workshop_Guide-Read_the_step--by--step_tutorial-6366F1?style=for-the-badge&logo=spring&logoColor=white)](https://lefterisxris.github.io/java-caching-meetup-demo/workshop-guide.html)
 
 </div>
 
