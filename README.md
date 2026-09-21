@@ -8,6 +8,10 @@ One deliberately slow endpoint (`GET /products/{id}`, one second per call) is ma
 
 [![Workshop Guide](https://img.shields.io/badge/%F0%9F%93%96_Workshop_Guide-Read_the_step--by--step_tutorial-6366F1?style=for-the-badge&logo=spring&logoColor=white)](https://lefterisxris.github.io/java-caching-meetup-demo/workshop-guide.html)
 
+<a href="https://lefterisxris.github.io/java-caching-meetup-demo/workshop-guide.html">
+  <img src="docs/images/workshop_page_preview.png" alt="Workshop Guide preview" width="800">
+</a>
+
 </div>
 
 > [!TIP]
