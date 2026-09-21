@@ -1,0 +1,2938 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Caching in Java -- Workshop Guide</title>
+<meta name="description" content="Hands-on workshop guide: caching in Java from a HashMap to Caffeine, Redis and Spring Cache (@Cacheable), with invalidation and failure modes.">
+<link rel="icon" type="image/x-icon" href="Java_Meetup_Icon_16x16.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Merriweather:wght@400;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-code: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  --font-size-base: 17px;
+  --line-height: 1.7;
+  --max-width: 860px;
+  --primary: #6366f1;
+  --primary-light: #e0e7ff;
+  --primary-dark: #4338ca;
+  --accent: #10b981;
+  --accent-light: #d1fae5;
+  --bg: #ffffff;
+  --bg-alt: #f8fafc;
+  --bg-code: #1e1e2e;
+  --text: #1e293b;
+  --text-muted: #64748b;
+  --text-code: #cdd6f4;
+  --border: #e2e8f0;
+  --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --note-bg: #eff6ff;
+  --note-border: #3b82f6;
+  --note-text: #1e40af;
+  --tip-bg: #f0fdf4;
+  --tip-border: #22c55e;
+  --tip-text: #166534;
+  --warn-bg: #fefce8;
+  --warn-border: #eab308;
+  --warn-text: #854d0e;
+  --important-bg: #fef2f2;
+  --important-border: #ef4444;
+  --important-text: #991b1b;
+}
+
+[data-theme="dark"] {
+  --bg: #0f172a;
+  --bg-alt: #1e293b;
+  --bg-code: #0d1117;
+  --text: #e2e8f0;
+  --text-muted: #94a3b8;
+  --text-code: #c9d1d9;
+  --border: #334155;
+  --primary: #818cf8;
+  --primary-light: #312e81;
+  --primary-dark: #a5b4fc;
+  --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.3);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4);
+  --note-bg: #1e293b;
+  --note-border: #60a5fa;
+  --note-text: #93c5fd;
+  --tip-bg: #1a2e1f;
+  --tip-border: #4ade80;
+  --tip-text: #86efac;
+  --warn-bg: #2d2506;
+  --warn-border: #facc15;
+  --warn-text: #fde68a;
+  --important-bg: #2d1215;
+  --important-border: #f87171;
+  --important-text: #fca5a5;
+}
+
+[data-theme="sepia"] {
+  --bg: #faf6f1;
+  --bg-alt: #f3ece4;
+  --text: #3d2e1e;
+  --text-muted: #7c6a56;
+  --border: #ddd2c4;
+  --primary: #b45309;
+  --primary-light: #fef3c7;
+  --primary-dark: #92400e;
+  --note-bg: #fef9ee;
+  --note-border: #d97706;
+  --note-text: #92400e;
+  --tip-bg: #f6f9f0;
+  --tip-border: #65a30d;
+  --tip-text: #3f6212;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html {
+  font-size: var(--font-size-base);
+  scroll-behavior: smooth;
+  scroll-padding-top: 80px;
+}
+
+body {
+  font-family: var(--font-body);
+  line-height: var(--line-height);
+  color: var(--text);
+  background: var(--bg);
+  transition: background 0.3s, color 0.3s;
+}
+
+/* --- Settings Panel --- */
+.settings-toggle {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1000;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-lg);
+  transition: transform 0.2s;
+}
+.settings-toggle:hover { transform: scale(1.1); }
+
+.settings-panel {
+  position: fixed;
+  bottom: 84px;
+  right: 24px;
+  z-index: 999;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  width: 280px;
+  box-shadow: var(--shadow-lg);
+  display: none;
+  transition: background 0.3s;
+}
+.settings-panel.open { display: block; }
+.settings-panel h4 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+.settings-panel label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  margin-top: 12px;
+}
+.settings-panel select, .settings-panel input[type="range"] {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-alt);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+.theme-buttons {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+.theme-btn {
+  flex: 1;
+  padding: 6px;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  background: var(--bg-alt);
+  color: var(--text);
+  transition: all 0.2s;
+}
+.theme-btn.active { border-color: var(--primary); background: var(--primary-light); }
+.font-size-display { font-weight: 600; color: var(--text); }
+
+/* --- Header --- */
+.site-header {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  color: white;
+  padding: 48px 24px 40px;
+  text-align: center;
+}
+.site-header h1 {
+  font-size: 2.2rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+  letter-spacing: -0.02em;
+}
+.site-header .subtitle {
+  font-size: 1.1rem;
+  opacity: 0.9;
+  font-weight: 400;
+}
+
+/* --- Progress Bar --- */
+.progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  background: var(--accent);
+  z-index: 1001;
+  transition: width 0.1s;
+}
+
+/* --- Layout: sidebar + content --- */
+.page-body {
+  display: flex;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+  gap: 0;
+  align-items: flex-start;
+}
+
+/* --- Sidebar TOC --- */
+.sidebar {
+  position: sticky;
+  top: 16px;
+  width: 260px;
+  min-width: 260px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: 16px 0;
+  margin-top: 32px;
+  border-right: 1px solid var(--border);
+  transition: width 0.3s, min-width 0.3s, opacity 0.3s, margin 0.3s;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.sidebar.collapsed { width: 0; min-width: 0; overflow: hidden; opacity: 0; padding: 0; margin: 0; border: none; }
+
+.sidebar-header {
+  padding: 0 16px 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sidebar-header h3 {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin: 0;
+}
+.sidebar-collapse-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 16px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.2s, color 0.2s;
+  line-height: 1;
+}
+.sidebar-collapse-btn:hover { background: var(--border); color: var(--text); }
+
+.sidebar-nav { padding: 0 8px; }
+.sidebar-nav ul { list-style: none; padding: 0; margin: 0; }
+
+.sidebar-nav > ul > li { margin-bottom: 1px; }
+
+.sidebar-nav .nav-link {
+  display: block;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text);
+  text-decoration: none;
+  border-radius: 5px;
+  border-left: 3px solid transparent;
+  transition: all 0.15s;
+  cursor: pointer;
+}
+.sidebar-nav .nav-link:hover {
+  background: var(--border);
+  color: var(--primary);
+}
+.sidebar-nav .nav-link.active {
+  background: var(--primary-light);
+  color: var(--primary);
+  border-left-color: var(--primary);
+  font-weight: 600;
+}
+
+/* Sub-items */
+.sidebar-nav .sub-nav {
+  list-style: none;
+  padding: 0 0 0 12px;
+  margin: 0;
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.3s ease;
+}
+.sidebar-nav .sub-nav.expanded { max-height: 500px; }
+.sidebar-nav .sub-nav li { margin: 0; }
+.sidebar-nav .sub-nav .nav-link {
+  font-size: 0.78rem;
+  font-weight: 400;
+  padding: 4px 10px;
+  color: var(--text-muted);
+  border-left: 2px solid transparent;
+}
+.sidebar-nav .sub-nav .nav-link:hover { color: var(--primary); background: rgba(0,0,0,0.03); }
+.sidebar-nav .sub-nav .nav-link.active {
+  color: var(--primary);
+  border-left-color: var(--primary);
+  background: transparent;
+  font-weight: 500;
+}
+
+/* Expand toggle arrow */
+.nav-link .expand-arrow {
+  float: right;
+  font-size: 0.65rem;
+  transition: transform 0.2s;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+.nav-link .expand-arrow.rotated { transform: rotate(90deg); }
+
+/* Sidebar open button */
+.sidebar-open-btn {
+  position: sticky;
+  top: 16px;
+  z-index: 10;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 16px;
+  color: var(--text-muted);
+  box-shadow: var(--shadow);
+  display: none;
+  margin-top: 32px;
+  margin-right: 8px;
+  min-width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: background 0.2s;
+}
+.sidebar-open-btn.visible { display: flex; }
+.sidebar-open-btn:hover { background: var(--border); color: var(--text); }
+
+/* Mobile overlay */
+.sidebar-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 899;
+  display: none;
+}
+.sidebar-overlay.visible { display: block; }
+
+/* --- Main Content --- */
+.content {
+  flex: 1;
+  min-width: 0;
+  max-width: var(--max-width);
+  padding: 32px 0 80px 32px;
+}
+
+/* --- Headings --- */
+h2 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin: 56px 0 16px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--border);
+  letter-spacing: -0.01em;
+}
+h3 {
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 36px 0 12px;
+}
+h4 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 24px 0 8px;
+}
+
+/* --- Paragraphs & Lists --- */
+p { margin: 12px 0; }
+ul, ol { margin: 12px 0; padding-left: 24px; }
+li { margin: 4px 0; }
+strong { font-weight: 600; }
+em { font-style: italic; }
+
+/* --- Links --- */
+a {
+  color: var(--primary);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.2s;
+}
+a:hover { border-bottom-color: var(--primary); }
+
+/* --- Code --- */
+code {
+  font-family: var(--font-code);
+  font-size: 0.88em;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--primary-dark);
+}
+pre {
+  border-radius: var(--radius-sm);
+  padding: 20px 24px;
+  overflow-x: auto;
+  margin: 16px 0;
+  box-shadow: var(--shadow);
+  line-height: 1.5;
+  font-size: 0.88rem;
+}
+pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+}
+
+/* Syntax colors: Islands Light (default) */
+.kw { color: #0033b3; font-weight: 600; }   /* keywords: bold blue */
+.str { color: #067d17; }                     /* strings: green */
+.cm { color: #8c8c8c; font-style: italic; }  /* comments: grey italic */
+.ann { color: #9e880d; }                     /* annotations: gold/yellow */
+.typ { color: #000000; }                     /* types: black */
+.num { color: #1750eb; }                     /* numbers: blue */
+.fn { color: #00627a; }                      /* methods: teal */
+.tag { color: #0033b3; }                     /* XML tags: blue */
+.attr { color: #174ad4; }                    /* attributes: blue */
+.val { color: #067d17; }                     /* values: green */
+.prop { color: #871094; }                    /* properties: purple */
+
+/* Code block: Islands Light */
+pre {
+  background: #f7f8fa;
+  color: #2b2b2b;
+  border: 1px solid var(--border);
+}
+pre code { color: #2b2b2b; }
+
+/* Islands Dark overrides */
+[data-theme="dark"] .kw { color: #cf8e6d; font-weight: 600; }
+[data-theme="dark"] .str { color: #6aab73; }
+[data-theme="dark"] .cm { color: #7a7e85; font-style: italic; }
+[data-theme="dark"] .ann { color: #bbb529; }
+[data-theme="dark"] .typ { color: #bcbec4; }
+[data-theme="dark"] .num { color: #2aacb8; }
+[data-theme="dark"] .fn { color: #56a8f5; }
+[data-theme="dark"] .tag { color: #cf8e6d; }
+[data-theme="dark"] .attr { color: #c77dbb; }
+[data-theme="dark"] .val { color: #6aab73; }
+[data-theme="dark"] .prop { color: #c77dbb; }
+[data-theme="dark"] pre { background: #1e1f22; color: #bcbec4; border-color: #393b40; }
+[data-theme="dark"] pre code { color: #bcbec4; }
+
+/* Sepia code block */
+[data-theme="sepia"] pre { background: #f0ebe3; color: #3d2e1e; border-color: var(--border); }
+[data-theme="sepia"] pre code { color: #3d2e1e; }
+[data-theme="sepia"] .kw { color: #7b3814; font-weight: 600; }
+[data-theme="sepia"] .str { color: #2e6b30; }
+[data-theme="sepia"] .cm { color: #8c7a66; }
+[data-theme="sepia"] .ann { color: #8a6d10; }
+[data-theme="sepia"] .fn { color: #1a6b6b; }
+[data-theme="sepia"] .prop { color: #6d1a7a; }
+
+/* --- Copy button --- */
+.code-wrapper {
+  position: relative;
+}
+.copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(128,128,128,0.15);
+  border: 1px solid rgba(128,128,128,0.2);
+  border-radius: 5px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-family: var(--font-body);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s, background 0.2s;
+  z-index: 2;
+}
+.code-wrapper:hover .copy-btn { opacity: 1; }
+.copy-btn:hover { background: rgba(128,128,128,0.3); }
+.copy-btn.copied {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+  opacity: 1;
+}
+
+/* --- Tables --- */
+table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 16px 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+}
+th {
+  background: var(--primary);
+  color: white;
+  font-weight: 600;
+  text-align: left;
+  padding: 12px 16px;
+  font-size: 0.9rem;
+}
+td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.95rem;
+}
+tr:last-child td { border-bottom: none; }
+tr:nth-child(even) { background: var(--bg-alt); }
+
+/* --- Images --- */
+.img-container {
+  margin: 20px 0;
+  text-align: center;
+}
+.img-container img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border);
+  cursor: zoom-in;
+  transition: box-shadow 0.3s;
+}
+.img-container img:hover {
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.12);
+}
+.img-container.small img { max-width: min(500px, 100%); }
+.img-caption {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 8px;
+  font-style: italic;
+}
+
+/* --- Image Lightbox --- */
+.lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(0,0,0,0.85);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+}
+.lightbox-overlay.open { display: flex; }
+
+.lightbox-toolbar {
+  position: absolute;
+  top: 0;
+  left: 0; right: 0;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 16px;
+  z-index: 2002;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, transparent 100%);
+}
+.lightbox-toolbar button {
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: white;
+  border-radius: 6px;
+  width: 36px;
+  height: 36px;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  line-height: 1;
+}
+.lightbox-toolbar button:hover { background: rgba(255,255,255,0.25); }
+.lightbox-zoom-level {
+  color: rgba(255,255,255,0.7);
+  font-size: 0.8rem;
+  font-family: var(--font-code);
+  margin: 0 8px;
+  min-width: 40px;
+  text-align: center;
+}
+
+.lightbox-viewport {
+  position: absolute;
+  inset: 56px 0 0 0;
+  overflow: hidden;
+  cursor: grab;
+  z-index: 2001;
+}
+.lightbox-viewport.dragging { cursor: grabbing; }
+.lightbox-viewport img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  max-height: none;
+  transform-origin: 0 0;
+  border-radius: var(--radius);
+  box-shadow: 0 0 60px rgba(0,0,0,0.4);
+  user-select: none;
+  -webkit-user-drag: none;
+  transition: none;
+}
+
+.lightbox-hint {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255,255,255,0.5);
+  font-size: 0.78rem;
+  pointer-events: none;
+  transition: opacity 0.5s;
+}
+.lightbox-hint.hidden { opacity: 0; }
+
+/* --- Callout Boxes --- */
+.callout {
+  border-left: 4px solid;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  padding: 16px 20px;
+  margin: 20px 0;
+  font-size: 0.95rem;
+}
+.callout p:first-child { margin-top: 0; }
+.callout p:last-child { margin-bottom: 0; }
+.callout-label {
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+.callout.note { background: var(--note-bg); border-color: var(--note-border); color: var(--note-text); }
+.callout.tip { background: var(--tip-bg); border-color: var(--tip-border); color: var(--tip-text); }
+.callout.warning { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn-text); }
+.callout.important { background: var(--important-bg); border-color: var(--important-border); color: var(--important-text); }
+
+/* --- Step Badge --- */
+.step-badge {
+  display: inline-block;
+  background: var(--primary);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+
+/* --- Separator --- */
+hr {
+  border: none;
+  height: 1px;
+  background: var(--border);
+  margin: 48px 0;
+}
+
+/* --- Back to top --- */
+.back-to-top {
+  position: fixed;
+  bottom: 84px;
+  left: 24px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 18px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow);
+  color: var(--text-muted);
+  transition: opacity 0.3s;
+}
+.back-to-top.visible { display: flex; }
+
+/* --- Wrap-up summary --- */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin: 24px 0;
+}
+.summary-card {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 20px;
+  transition: box-shadow 0.2s;
+}
+.summary-card:hover { box-shadow: var(--shadow-lg); }
+.summary-card h4 { margin: 0 0 6px; color: var(--primary); font-size: 0.95rem; }
+.summary-card p { margin: 0; font-size: 0.9rem; color: var(--text-muted); }
+
+/* --- Community Banner --- */
+.community-banner {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 32px;
+  margin-bottom: 40px;
+  display: flex;
+  gap: 28px;
+  align-items: center;
+}
+.community-banner .community-logo {
+  width: 140px;
+  min-width: 140px;
+  height: auto;
+  border-radius: 50%;
+}
+.community-banner h3 {
+  margin: 0 0 6px;
+  font-size: 1.3rem;
+  color: var(--primary);
+}
+.community-banner .community-tagline {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  font-style: italic;
+  margin: 0 0 10px;
+}
+.community-banner p { margin: 6px 0; font-size: 0.92rem; }
+.community-banner a { border-bottom: none; }
+.community-link-btn {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 8px 20px;
+  background: var(--primary);
+  color: white !important;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.88rem;
+  transition: background 0.2s;
+}
+.community-link-btn:hover { background: var(--primary-dark); }
+
+/* --- Author Card --- */
+.author-card {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px 32px;
+  margin: 40px 0;
+  display: flex;
+  gap: 24px;
+  align-items: center;
+}
+.author-card .author-photo {
+  width: 110px;
+  min-width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid var(--border);
+}
+.author-card h4 {
+  margin: 0 0 2px;
+  font-size: 1.15rem;
+  color: var(--text);
+}
+.author-card .author-title {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 0 0 8px;
+}
+.author-card .author-bio {
+  font-size: 0.9rem;
+  margin: 0 0 10px;
+  line-height: 1.6;
+}
+.author-links {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.author-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  transition: all 0.2s;
+}
+.author-links a:hover { color: var(--primary); border-color: var(--primary); background: var(--primary-light); }
+.author-links svg { width: 16px; height: 16px; fill: currentColor; }
+
+/* --- Footer --- */
+.site-footer {
+  text-align: center;
+  padding: 40px 24px 48px;
+  border-top: 1px solid var(--border);
+  margin-top: 20px;
+}
+.site-footer .footer-logo {
+  width: 80px;
+  border-radius: 50%;
+  margin-bottom: 12px;
+}
+.site-footer .footer-slogan {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--primary);
+  margin: 8px 0 4px;
+}
+.site-footer .footer-quote {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.site-footer .footer-links {
+  margin-top: 16px;
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.site-footer .footer-links a {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.site-footer .footer-links a:hover { color: var(--primary); }
+
+@media (max-width: 640px) {
+  .community-banner { flex-direction: column; text-align: center; padding: 24px 20px; }
+  .community-banner .community-logo { width: 100px; min-width: 100px; }
+  .author-card { flex-direction: column; text-align: center; padding: 24px 20px; }
+  .author-card .author-photo { width: 90px; min-width: 90px; height: 90px; }
+  .author-links { justify-content: center; }
+}
+
+/* --- Responsive --- */
+@media (max-width: 1024px) {
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0;
+    width: 280px; min-width: 280px;
+    height: 100vh;
+    max-height: 100vh;
+    margin-top: 0;
+    background: var(--bg);
+    z-index: 900;
+    border-right: 1px solid var(--border);
+    border-radius: 0;
+    transform: translateX(-280px);
+    transition: transform 0.3s ease;
+    padding-top: 20px;
+  }
+  .sidebar.collapsed { transform: translateX(-280px); width: 280px; min-width: 280px; opacity: 1; padding: 20px 0; }
+  .sidebar.mobile-open { transform: translateX(0); }
+  .sidebar-open-btn { position: sticky; display: flex !important; }
+  .page-body { padding: 0 16px; }
+  .content { padding-left: 0; }
+}
+
+@media (max-width: 640px) {
+  .site-header h1 { font-size: 1.6rem; }
+  .site-header { padding: 32px 16px; }
+  .content { padding: 0 0 60px 0; }
+  h2 { font-size: 1.4rem; }
+  h3 { font-size: 1.15rem; }
+  pre { padding: 14px 16px; font-size: 0.82rem; }
+  table { font-size: 0.85rem; }
+  th, td { padding: 8px 10px; }
+  .settings-panel { width: calc(100vw - 48px); right: 24px; }
+}
+
+@media print {
+  .settings-toggle, .settings-panel, .back-to-top, .progress-bar, .sidebar, .sidebar-open-btn { display: none !important; }
+  .page-body { display: block; }
+  .content { padding-left: 0 !important; max-width: 100%; }
+  .site-header { padding: 24px; }
+  .img-container img { box-shadow: none; border: 1px solid #ccc; }
+  pre { border: 1px solid #ddd; box-shadow: none; }
+  a { color: inherit; border: none; }
+  a[href]::after { content: " (" attr(href) ")"; font-size: 0.8em; color: #666; }
+}
+
+/* --- Additions for the caching guide --- */
+blockquote {
+  margin: 20px 0;
+  padding: 12px 20px;
+  border-left: 4px solid var(--primary);
+  background: var(--bg-alt);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--text);
+  font-style: italic;
+}
+blockquote p { margin: 0; }
+.callout blockquote { margin: 12px 0; font-style: normal; }
+.callout pre { margin: 12px 0; }
+.callout ol, .callout ul { margin: 8px 0 0; padding-left: 22px; }
+.callout li { margin: 4px 0; }
+.callout code { color: inherit; opacity: 0.9; }
+.table-wrap { overflow-x: auto; margin: 16px 0; }
+.table-wrap table { margin: 0; min-width: 100%; }
+h2, h3 { scroll-margin-top: 24px; }
+.img-caption a { font-style: normal; }
+
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progressBar"></div>
+
+<!-- Overlay for mobile -->
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<header class="site-header">
+  <h1>Caching in Java</h1>
+  <div class="subtitle">From HashMap to Redis - SKG Java Meetup, Thessaloniki</div>
+</header>
+
+<div class="page-body">
+
+<!-- Sidebar open button (visible when sidebar is collapsed/mobile) -->
+<button class="sidebar-open-btn" id="sidebarOpenBtn" title="Open navigation">&#9776;</button>
+
+<!-- Sidebar TOC -->
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <h3>Contents</h3>
+    <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" title="Collapse sidebar">&#10005;</button>
+  </div>
+  <div class="sidebar-nav" id="sidebarNav">
+    <ul>
+      <li>
+        <a class="nav-link" data-toggle="intro-sub">Introduction <span class="expand-arrow">&#9654;</span></a>
+        <ul class="sub-nav" id="intro-sub">
+          <li><a href="#intro" class="nav-link">Overview</a></li>
+          <li><a href="#intro-what-you-ll-learn" class="nav-link">What You&#x27;ll Learn</a></li>
+          <li><a href="#intro-about-this-workshop" class="nav-link">About This Workshop</a></li>
+          <li><a href="#intro-resources" class="nav-link">Resources</a></li>
+          <li><a href="#intro-prerequisites" class="nav-link">Prerequisites</a></li>
+          <li><a href="#intro-how-to-use-this-guide" class="nav-link">How to Use This Guide</a></li>
+        </ul>
+      </li>
+      <li>
+        <a class="nav-link" data-toggle="step0-sub">Step 0 - Scaffold <span class="expand-arrow">&#9654;</span></a>
+        <ul class="sub-nav" id="step0-sub">
+          <li><a href="#step0" class="nav-link">Overview</a></li>
+          <li><a href="#step0-generate-the-project" class="nav-link">Generate the Project</a></li>
+          <li><a href="#step0-the-domain" class="nav-link">The Domain</a></li>
+          <li><a href="#step0-run-and-measure" class="nav-link">Run and Measure</a></li>
+          <li><a href="#step0-where-can-caching-happen" class="nav-link">Where Can Caching Happen?</a></li>
+          <li><a href="#step0-initialize-git" class="nav-link">Initialize Git</a></li>
+        </ul>
+      </li>
+      <li>
+        <a class="nav-link" data-toggle="step1-sub">Step 1 - Naive Cache <span class="expand-arrow">&#9654;</span></a>
+        <ul class="sub-nav" id="step1-sub">
+          <li><a href="#step1" class="nav-link">Overview</a></li>
+          <li><a href="#step1-just-use-a-map" class="nav-link">Just Use a Map</a></li>
+          <li><a href="#step1-what-is-wrong" class="nav-link">What Is Wrong?</a></li>
+          <li><a href="#step1-concurrenthashmap" class="nav-link">ConcurrentHashMap</a></li>
+        </ul>
+      </li>
+      <li>
+        <a class="nav-link" data-toggle="step2-sub">Step 2 - Caffeine <span class="expand-arrow">&#9654;</span></a>
+        <ul class="sub-nav" id="step2-sub">
+          <li><a href="#step2" class="nav-link">Overview</a></li>
+          <li><a href="#step2-dependency" class="nav-link">Dependency</a></li>
+          <li><a href="#step2-basic-usage" class="nav-link">Basic Usage</a></li>
+          <li><a href="#step2-eviction-stats" class="nav-link">Eviction &amp; Stats</a></li>
+          <li><a href="#step2-loadingcache-refresh" class="nav-link">LoadingCache &amp; Refresh</a></li>
+          <li><a href="#step2-local-cache-topology" class="nav-link">Local Cache Topology</a></li>
+        </ul>
+      </li>
+      <li>
+        <a class="nav-link" data-toggle="step3-sub">Step 3 - Redis <span class="expand-arrow">&#9654;</span></a>
+        <ul class="sub-nav" id="step3-sub">
+          <li><a href="#step3" class="nav-link">Overview</a></li>
+          <li><a href="#step3-advantages-costs" class="nav-link">Advantages &amp; Costs</a></li>
+          <li><a href="#step3-docker-compose" class="nav-link">Docker Compose</a></li>
+          <li><a href="#step3-dependency" class="nav-link">Dependency</a></li>
+          <li><a href="#step3-serializer" class="nav-link">Serializer</a></li>
+          <li><a href="#step3-realistic-repository" class="nav-link">Realistic Repository</a></li>
+          <li><a href="#step3-redis-by-hand" class="nav-link">Redis, by Hand</a></li>
+          <li><a href="#step3-test-it" class="nav-link">Test It</a></li>
+          <li><a href="#step3-redis-uis" class="nav-link">Redis UIs</a></li>
+          <li><a href="#step3-cheat-sheet" class="nav-link">Cheat Sheet</a></li>
+          <li><a href="#step3-boilerplate" class="nav-link">Boilerplate?</a></li>
+        </ul>
+      </li>
+      <li>
+        <a class="nav-link" data-toggle="step4-sub">Step 4 - Spring Cache <span class="expand-arrow">&#9654;</span></a>
+        <ul class="sub-nav" id="step4-sub">
+          <li><a href="#step4" class="nav-link">Overview</a></li>
+          <li><a href="#step4-cacheable-is-not-a-cache" class="nav-link">@Cacheable Is Not a Cache</a></li>
+          <li><a href="#step4-dependency" class="nav-link">Dependency</a></li>
+          <li><a href="#step4-enable-caching" class="nav-link">Enable Caching</a></li>
+          <li><a href="#step4-the-reveal" class="nav-link">The Reveal</a></li>
+          <li><a href="#step4-behind-cacheable" class="nav-link">Behind @Cacheable</a></li>
+          <li><a href="#step4-provider-1-simple" class="nav-link">Provider 1: simple</a></li>
+          <li><a href="#step4-provider-2-caffeine" class="nav-link">Provider 2: Caffeine</a></li>
+          <li><a href="#step4-provider-3-redis" class="nav-link">Provider 3: Redis</a></li>
+          <li><a href="#step4-three-providers" class="nav-link">Three Providers</a></li>
+          <li><a href="#step4-boot-4-gotchas" class="nav-link">Boot 4 Gotchas</a></li>
+          <li><a href="#step4-cache-keys" class="nav-link">Cache Keys</a></li>
+          <li><a href="#step4-hits-misses-optional" class="nav-link">Hits &amp; Misses (optional)</a></li>
+        </ul>
+      </li>
+      <li>
+        <a class="nav-link" data-toggle="step5-sub">Step 5 - Invalidation <span class="expand-arrow">&#9654;</span></a>
+        <ul class="sub-nav" id="step5-sub">
+          <li><a href="#step5" class="nav-link">Overview</a></li>
+          <li><a href="#step5-update-endpoint" class="nav-link">Update Endpoint</a></li>
+          <li><a href="#step5-the-bug" class="nav-link">The Bug</a></li>
+          <li><a href="#step5-fix-1-cacheevict" class="nav-link">Fix 1: @CacheEvict</a></li>
+          <li><a href="#step5-fix-2-cacheput" class="nav-link">Fix 2: @CachePut</a></li>
+          <li><a href="#step5-the-three-annotations" class="nav-link">The Three Annotations</a></li>
+          <li><a href="#step5-self-invocation-trap" class="nav-link">Self-Invocation Trap</a></li>
+        </ul>
+      </li>
+      <li>
+        <a class="nav-link" data-toggle="step6-sub">Step 6 - Beyond the Demo <span class="expand-arrow">&#9654;</span></a>
+        <ul class="sub-nav" id="step6-sub">
+          <li><a href="#step6" class="nav-link">Overview</a></li>
+          <li><a href="#step6-failure-modes" class="nav-link">Failure Modes</a></li>
+          <li><a href="#step6-caffeine-vs-redis" class="nav-link">Caffeine vs Redis</a></li>
+          <li><a href="#step6-should-we-cache-this" class="nav-link">Should We Cache This?</a></li>
+          <li><a href="#step6-which-cache" class="nav-link">Which Cache?</a></li>
+        </ul>
+      </li>
+      <li>
+        <a class="nav-link" data-toggle="wrapup-sub">Wrap-up <span class="expand-arrow">&#9654;</span></a>
+        <ul class="sub-nav" id="wrapup-sub">
+          <li><a href="#wrapup" class="nav-link">Overview</a></li>
+          <li><a href="#wrapup-key-takeaways" class="nav-link">Key Takeaways</a></li>
+          <li><a href="#wrapup-resources" class="nav-link">Resources</a></li>
+        </ul>
+      </li>
+      <li><a href="#community" class="nav-link">Get Involved</a></li>
+    </ul>
+  </div>
+</nav>
+
+<main class="content">
+
+<!-- ====== COMMUNITY BANNER ====== -->
+<div class="community-banner">
+  <img src="images/skg-java-logo.png" alt="SKG Java Community" class="community-logo">
+  <div>
+    <h3>SKG Java Community</h3>
+    <p class="community-tagline">Explore &middot; Learn &middot; Engage &middot; Socialize</p>
+    <p>A community of developers in Thessaloniki, sharing knowledge and exchanging ideas around Java and beyond - Kubernetes, LLMs, AI, GraphQL, Kafka, Docker, OpenTelemetry, CI/CD, and more.</p>
+    <p>Everyone is welcome to attend, present, socialize, exchange ideas, and make new connections!</p>
+    <ul style="list-style: none; padding: 0; margin: 10px 0; font-size: 0.88rem; line-height: 2;">
+      <li>&#127908; <a href="https://forms.gle/9Hq5bJnYZuHsBBn16">Submit a talk or suggest a topic</a></li>
+      <li>&#128161; <a href="https://trello.com/b/9uQt5Tex/topics-voting">Vote for topics in the backlog</a></li>
+      <li>&#128187; <a href="https://github.com/skg-java-community/meetups">GitHub Repo</a></li>
+      <li>&#129309; <a href="https://www.facebook.com/ThessalonikiJavaMeetup">Facebook Page</a></li>
+      <li>&#128150; <a href="https://opencollective.com/skgjug/contribute/meetup-event-sponsor-94613">Sponsorship &amp; Donations</a></li>
+    </ul>
+    <a href="https://www.meetup.com/thessaloniki-not-only-java/" class="community-link-btn">Join us on Meetup <img src="images/meetup-icon.png" alt="Meetup" style="width:18px;height:18px;border:none;box-shadow:none;border-radius:50%;vertical-align:middle;margin-left:6px;"></a>
+  </div>
+</div>
+
+<!-- ====== AUTHOR ====== -->
+<div class="author-card">
+  <img src="images/author-eleftherios.png" alt="Eleftherios Chrysochoidis" class="author-photo">
+  <div>
+    <h4>Eleftherios Chrysochoidis</h4>
+    <p class="author-title">Technical Lead at Chubb &middot; SKG Java Community Organizer</p>
+    <p class="author-bio">With 10+ years of experience in software engineering, Eleftherios (or simply Lef) has gained deep expertise in Java and Spring Boot technologies. He is an active organizer of local tech events in Thessaloniki, dedicated to fostering a vibrant community of software engineers. Always eager to talk and present at community events, aiming to share and spread knowledge.</p>
+    <ul class="author-links">
+      <li><a href="https://www.linkedin.com/in/lefterisxris/" title="LinkedIn"><img src="images/linkedin-icon.png" alt="LinkedIn" style="width:16px;height:16px;border:none;box-shadow:none;border-radius:50%;vertical-align:middle;"> LinkedIn</a></li>
+      <li><a href="https://github.com/LefterisXris" title="GitHub"><img src="images/github-icon.png" alt="GitHub" style="width:16px;height:16px;border:none;box-shadow:none;border-radius:50%;vertical-align:middle;"> GitHub</a></li>
+      <li><a href="https://sessionize.com/eleftherios-chrysochoidis/" title="Sessionize"><img src="images/sessionize-icon.png" alt="Sessionize" style="width:16px;height:16px;border:none;box-shadow:none;border-radius:3px;vertical-align:middle;"> Sessionize</a></li>
+    </ul>
+  </div>
+</div>
+
+<h2 id="intro">Introduction</h2>
+<p>Caching sounds simple: store something expensive once and reuse it. In practice, things get interesting very quickly. Where should the cache live? How long should data stay cached? What happens when the application runs on multiple instances? When is an in-memory cache such as Caffeine the right choice, and when does a distributed cache like Redis make more sense? And what exactly happens behind Spring's <code>@Cacheable</code> annotation?</p>
+<p>In this hands-on workshop we start from a Spring Boot application with one deliberately slow endpoint and we make it fast, step by step: a plain <code>HashMap</code>, a <code>ConcurrentHashMap</code>, Caffeine, Redis, and finally the Spring Cache abstraction. At every step we look at <strong>what changes and what does not</strong> in the application code, and at the problems each solution introduces.</p>
+<p>The narrative of the whole workshop is:</p>
+<pre><code>Problem → naive cache → local cache → distributed cache
+        → Spring abstraction → invalidation
+        → failure modes → decision framework</code></pre>
+<h3 id="intro-what-you-ll-learn">What You'll Learn</h3>
+<ul>
+<li>Why a plain <code>Map</code> is not a cache, and what a cache library adds on top of it</li>
+<li><strong>Caffeine</strong>: size and time based eviction, statistics, <code>LoadingCache</code>, <code>refreshAfterWrite</code></li>
+<li><strong>Redis</strong> as a shared cache: serialization, TTL, <code>redis-cli</code>, Redis UIs</li>
+<li><strong>Spring Cache</strong>: what <code>@Cacheable</code> does, what a <code>CacheManager</code> is, and how to switch providers in YAML</li>
+<li><strong>Invalidation</strong>: the stale-data bug, <code>@CacheEvict</code>, <code>@CachePut</code>, the self-invocation trap</li>
+<li>The <strong>failure modes</strong> nobody tells you about (stale data, stampedes, unbounded caches, local inconsistency) and a decision framework for "should we cache this, and where?"</li>
+</ul>
+<h3 id="intro-about-this-workshop">About This Workshop</h3>
+<p>This workshop was presented at the <strong>SKG Java Meetup</strong> on <strong>Wednesday, September 16, 2026</strong> at Ok!Thess, Thessaloniki, as the opening session of the 2026-2027 season.</p>
+<div class="img-container">
+  <img src="images/event-poster.png" alt="Caching in Java - SKG Java Meetup event poster">
+  <div class="img-caption">Caching in Java - SKG Java Meetup event poster</div>
+</div>
+<p><a href="https://www.meetup.com/thessaloniki-not-only-java/events/316466603/">View event details on Meetup →</a></p>
+<h3 id="intro-resources">Resources</h3>
+<ul>
+<li><strong>Spring Framework - Cache Abstraction</strong>: <a href="https://docs.spring.io/spring-framework/reference/integration/cache.html">docs.spring.io/spring-framework/reference/integration/cache.html</a> - the reference for <code>@Cacheable</code>, <code>@CachePut</code>, <code>@CacheEvict</code> and <code>CacheManager</code>.</li>
+<li><strong>Spring Boot - Caching</strong>: <a href="https://docs.spring.io/spring-boot/reference/io/caching.html">docs.spring.io/spring-boot/reference/io/caching.html</a> - provider auto-configuration and the <code>spring.cache.*</code> properties.</li>
+<li><strong>Caffeine</strong>: <a href="https://github.com/ben-manes/caffeine">github.com/ben-manes/caffeine</a> - the wiki is excellent, especially the pages on eviction, refresh and statistics.</li>
+<li><strong>Spring Data Redis</strong>: <a href="https://docs.spring.io/spring-data/redis/reference/">docs.spring.io/spring-data/redis/reference/</a> - <code>RedisTemplate</code>, serializers and <code>RedisCacheManager</code>.</li>
+<li><strong>Baeldung</strong>: <a href="https://www.baeldung.com/spring-cache-tutorial">Spring Cache Guide</a>, <a href="https://www.baeldung.com/java-caching-caffeine">Caffeine</a>, <a href="https://www.baeldung.com/spring-boot-redis-cache">Spring Boot Redis Cache</a>.</li>
+</ul>
+<div class="callout note">
+  <div class="callout-label">&#128221; Source Code</div>
+<p>The complete source code for this workshop is available on GitHub: <a href="https://github.com/LefterisXris/java-caching-meetup-demo">LefterisXris/java-caching-meetup-demo</a>. Every step of this guide is a Git tag (<code>stage-00-no-cache</code> … <code>stage-13-cacheput</code>), so you can either write the code yourself and compare, or simply <code>git checkout</code> the tag and run it.</p>
+</div>
+<h3 id="intro-prerequisites">Prerequisites</h3>
+<ul>
+<li><strong>Java 21+</strong> and <strong>Maven 3.9+</strong> (or an IDE with a bundled Maven, such as IntelliJ IDEA)</li>
+<li><strong>Docker</strong> (Docker Desktop or any Docker engine with <code>docker compose</code>) - needed from Step 3 onwards, for Redis</li>
+<li><strong>curl</strong> (Git Bash on Windows works fine), or the IntelliJ HTTP client - the screenshots use the latter</li>
+<li>An IDE - IntelliJ IDEA is used in the screenshots</li>
+</ul>
+<h3 id="intro-how-to-use-this-guide">How to Use This Guide</h3>
+<p>Every step follows the same rhythm:</p>
+<pre><code>Explain the concept → change 5-15 lines of code → restart
+                    → curl → observe → discuss the trade-off</code></pre>
+<p>The application is tiny on purpose (one domain object, one endpoint, one service) so that the <em>only</em> thing that changes between steps is the caching strategy. The service class <code>ProductService</code> is rewritten in almost every step; everything else stays the same.</p>
+<p>You can follow the guide in two ways:</p>
+<ul>
+<li><strong>Build mode</strong>: write the code shown in each step yourself, then compare with the tag.</li>
+<li><strong>Tour mode</strong>: <code>git checkout &lt;tag&gt;</code>, restart the application, run the commands, observe.</li>
+</ul>
+<div class="callout tip">
+  <div class="callout-label">&#128161; Timing a request</div>
+<p>The single most useful command of this workshop measures how long a request takes. Keep it in a terminal:</p>
+<pre><code>curl -w <span class="str">&#x27;\n%{time_total}s\n&#x27;</span> localhost:8080/products/1</code></pre>
+<p>The commands in this guide are written as <code>curl</code> so they work anywhere. The screenshots use the <strong>IntelliJ HTTP client</strong> instead (a scratch <code>.http</code> file): it shows the same duration next to the response status, and it can run one request several times in a row - handy for "call it three times and compare":</p>
+<pre><code>### loop - many times
+&lt; {%
+  request.variables.set(&quot;products&quot;, [1,1,1])
+%}
+GET http://localhost:8080/products/{{$.products}}</code></pre>
+<p>The request is executed once per value in the array, and the <strong>Services</strong> tool window lists every run with its response time.</p>
+</div>
+<hr />
+<h2 id="step0"><span class="step-badge">Step 0</span> Project Scaffold and a Deliberately Slow Repository</h2>
+<p>In this step we generate the base Spring Boot project, add a tiny "product catalogue" whose repository takes <strong>one second</strong> per call, and measure it. No caching yet - just the problem.</p>
+<h3 id="step0-generate-the-project">Generate the Project</h3>
+<p>Go to <a href="https://start.spring.io/">start.spring.io</a> and configure the project with the following settings:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Project</strong></td>
+<td>Maven</td>
+</tr>
+<tr>
+<td><strong>Language</strong></td>
+<td>Java</td>
+</tr>
+<tr>
+<td><strong>Spring Boot</strong></td>
+<td>4.1.1 (latest stable)</td>
+</tr>
+<tr>
+<td><strong>Group</strong></td>
+<td><code>gr.skg</code></td>
+</tr>
+<tr>
+<td><strong>Artifact</strong></td>
+<td><code>cache-java-meetup</code></td>
+</tr>
+<tr>
+<td><strong>Package name</strong></td>
+<td><code>gr.skg.cachejavameetup</code></td>
+</tr>
+<tr>
+<td><strong>Packaging</strong></td>
+<td>Jar</td>
+</tr>
+<tr>
+<td><strong>Configuration</strong></td>
+<td>YAML</td>
+</tr>
+<tr>
+<td><strong>Java</strong></td>
+<td>21</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Dependencies</strong> (use <code>CTRL+B</code> to add): <strong>Spring Web</strong> only. Caffeine, Redis and Spring Cache are added later, one at a time, exactly when they are needed.</p>
+<div class="img-container">
+  <img src="images/step0-spring-initializr.png" alt="Spring Initializr configured for the workshop project">
+  <div class="img-caption">Spring Initializr configured for the workshop project</div>
+</div>
+<p>Click <strong>GENERATE</strong> (<code>CTRL+Enter</code>) to download the zip, extract it and open it in your IDE.</p>
+<h3 id="step0-the-domain">The Domain: One Product, One Slow Repository</h3>
+<p>Create the following four classes in the base package <code>gr.skg.cachejavameetup</code>.</p>
+<p><code>Product.java</code> - a record is all we need:</p>
+<pre><code><span class="kw">package</span> gr.skg.cachejavameetup;
+
+<span class="kw">record</span> <span class="typ">Product</span>(Long id, String name, Double price) {}</code></pre>
+<p><code>ProductRepository.java</code> - simulates an expensive dependency (a database, a remote API, a heavy computation) by sleeping for one second on every call:</p>
+<pre><code><span class="kw">package</span> gr.skg.cachejavameetup;
+
+<span class="kw">import</span> org.springframework.stereotype.Repository;
+
+<span class="cm">/**
+ * A deliberately slow repository/service simulates an expensive dependency
+ */</span>
+<span class="ann">@Repository</span>
+<span class="kw">class</span> <span class="typ">ProductRepository</span> {
+
+   <span class="kw">public</span> Product <span class="fn">findById</span>(Long id) {
+      <span class="cm">// simulate delay (1s)</span>
+      dbSlowOperation();
+
+      <span class="kw">return</span> <span class="kw">new</span> Product(id, <span class="str">&quot;</span><span class="str">iPhone</span><span class="str">&quot;</span>, <span class="num">1200.0</span>);
+   }
+
+   <span class="kw">private</span> <span class="typ">void</span> <span class="fn">dbSlowOperation</span>() {
+      <span class="kw">try</span> {
+         Thread.<span class="attr">sleep</span>(<span class="num">1</span> * <span class="num">1000</span>);
+      } <span class="kw">catch</span> (InterruptedException e) {
+         <span class="kw">throw</span> <span class="kw">new</span> RuntimeException(e);
+      }
+   }
+}</code></pre>
+<p><code>ProductService.java</code> - the class we will rewrite in almost every step. For now it just delegates:</p>
+<pre><code><span class="kw">package</span> gr.skg.cachejavameetup;
+
+<span class="kw">import</span> org.springframework.stereotype.Service;
+
+<span class="ann">@Service</span>
+<span class="kw">public</span> <span class="kw">class</span> <span class="typ">ProductService</span> {
+   <span class="kw">private</span> <span class="kw">final</span> ProductRepository productRepository;
+
+   <span class="kw">public</span> <span class="fn">ProductService</span>(ProductRepository productRepository) {<span class="kw">this</span>.<span class="attr">productRepository</span> = productRepository;}
+
+   <span class="kw">public</span> Product <span class="fn">getProduct</span>(Long id) {
+      <span class="kw">return</span> productRepository.<span class="attr">findById</span>(id);
+   }
+}</code></pre>
+<p><code>ProductController.java</code> - exposes <code>GET /products/{id}</code>:</p>
+<pre><code><span class="kw">package</span> gr.skg.cachejavameetup;
+
+<span class="kw">import</span> org.springframework.web.bind.annotation.GetMapping;
+<span class="kw">import</span> org.springframework.web.bind.annotation.PathVariable;
+<span class="kw">import</span> org.springframework.web.bind.annotation.RequestMapping;
+<span class="kw">import</span> org.springframework.web.bind.annotation.RestController;
+
+<span class="ann">@RestController</span>
+<span class="ann">@RequestMapping</span>(<span class="str">&quot;</span><span class="str">/products</span><span class="str">&quot;</span>)
+<span class="kw">class</span> <span class="typ">ProductController</span> {
+   <span class="kw">private</span> <span class="kw">final</span> ProductService productService;
+
+   ProductController(ProductService productService) {<span class="kw">this</span>.<span class="attr">productService</span> = productService;}
+
+   <span class="ann">@GetMapping</span>(<span class="str">&quot;</span><span class="str">/{id}</span><span class="str">&quot;</span>)
+   <span class="kw">public</span> Product <span class="fn">findById</span>(<span class="ann">@PathVariable</span> Long id) {
+      <span class="kw">return</span> productService.<span class="attr">getProduct</span>(id);
+   }
+}</code></pre>
+<div class="callout note">
+  <div class="callout-label">&#128221; Note</div>
+<p>In this step the repository returns a product for <strong>any</strong> id. This is intentional: it lets us demonstrate an unbounded cache (Step 1) and size-based eviction (Step 2) by simply requesting many different ids. A realistic repository with 10 seeded products replaces it in Step 3.</p>
+</div>
+<h3 id="step0-run-and-measure">Run and Measure</h3>
+<p>Run the main class <code>App</code>. Once you see <code>Started App in … seconds</code>, request the same product three times:</p>
+<div class="img-container">
+  <img src="images/step0-intellij-run.png" alt="Application started in IntelliJ">
+  <div class="img-caption">Application started in IntelliJ</div>
+</div>
+<pre><code>curl -w <span class="str">&#x27;\n%{time_total}s\n&#x27;</span> localhost:8080/products/1
+curl -w <span class="str">&#x27;\n%{time_total}s\n&#x27;</span> localhost:8080/products/1
+curl -w <span class="str">&#x27;\n%{time_total}s\n&#x27;</span> localhost:8080/products/1</code></pre>
+<pre><code>{&quot;id&quot;:1,&quot;name&quot;:&quot;iPhone&quot;,&quot;price&quot;:1200.0}
+1.012s
+{&quot;id&quot;:1,&quot;name&quot;:&quot;iPhone&quot;,&quot;price&quot;:1200.0}
+1.008s
+{&quot;id&quot;:1,&quot;name&quot;:&quot;iPhone&quot;,&quot;price&quot;:1200.0}
+1.006s</code></pre>
+<div class="img-container">
+  <img src="images/step0-curl-slow.png" alt="Three requests for the same product in the IntelliJ HTTP client: 1 s 15 ms, 1 s 21 ms, 1 s 11 ms">
+  <div class="img-caption">Three requests for the same product in the IntelliJ HTTP client: 1 s 15 ms, 1 s 21 ms, 1 s 11 ms</div>
+</div>
+<p>Every request takes ~1 second, and every request produces the same answer. This is the question for the rest of the workshop:</p>
+<blockquote>
+<p>If an operation takes one second and gives us the same answer 1,000 times, how many times should we really execute it?</p>
+</blockquote>
+<h3 id="step0-where-can-caching-happen">Where Can Caching Happen?</h3>
+<p>Before touching Java code, it is worth remembering that caching exists at every layer of a request:</p>
+<pre><code>Browser  →  CDN  →  Reverse Proxy / Gateway  →  Application  →  Database</code></pre>
+<ul>
+<li><strong>Browser</strong>: <code>Cache-Control: max-age=3600</code>, <code>ETag</code></li>
+<li><strong>CDN / Gateway</strong>: static content, public API responses</li>
+<li><strong>Application</strong> (this workshop): <code>ConcurrentHashMap</code>, Caffeine, Redis, Hazelcast, Ehcache …</li>
+</ul>
+<p>The closer to the database, the more control - and the more responsibility - we have. We are going to move the cache progressively closer to the Java code and examine what changes.</p>
+<h3 id="step0-initialize-git">Initialize Git</h3>
+<pre><code><span class="kw">cd</span> cache-java-meetup
+git init
+git add .gitignore pom.xml src/
+git commit -m <span class="str">&quot;init commit. Get Product&quot;</span></code></pre>
+<div class="callout note">
+  <div class="callout-label">&#128221; Checkpoint</div>
+<p>This is tag <code>stage-00-no-cache</code> in the demo repository.</p>
+</div>
+<hr />
+<h2 id="step1"><span class="step-badge">Step 1</span> The Naive Cache - HashMap and ConcurrentHashMap</h2>
+<p>The first thing everyone writes. It is intentionally satisfying - and then we ask what is wrong with it.</p>
+<h3 id="step1-just-use-a-map">Just Use a Map</h3>
+<p>Replace the body of <code>ProductService</code> with a <code>HashMap</code> and the classic <em>get → null-check → load → put</em> shape:</p>
+<pre><code><span class="kw">package</span> gr.skg.cachejavameetup;
+
+<span class="kw">import</span> org.springframework.stereotype.Service;
+
+<span class="kw">import</span> java.util.HashMap;
+<span class="kw">import</span> java.util.Map;
+
+<span class="ann">@Service</span>
+<span class="kw">public</span> <span class="kw">class</span> <span class="typ">ProductService</span> {
+   <span class="kw">private</span> <span class="kw">final</span> ProductRepository productRepository;
+   <span class="cm">// Simple Cache</span>
+   <span class="kw">private</span> <span class="kw">final</span> Map&lt;Long, Product&gt; cache = <span class="kw">new</span> HashMap&lt;&gt;();
+
+   <span class="kw">public</span> <span class="fn">ProductService</span>(ProductRepository productRepository) {<span class="kw">this</span>.<span class="attr">productRepository</span> = productRepository;}
+
+   <span class="kw">public</span> Product <span class="fn">getProduct</span>(Long id) {
+      Product cached = cache.<span class="attr">get</span>(id);
+      <span class="kw">if</span> (cached != <span class="kw">null</span>) {
+         <span class="kw">return</span> cached;
+      }
+
+      Product product = productRepository.<span class="attr">findById</span>(id);
+      cache.<span class="attr">put</span>(id, product);
+      <span class="kw">return</span> product;
+   }
+}</code></pre>
+<p>Restart and request product 1 twice:</p>
+<pre><code>curl -w <span class="str">&#x27;\n%{time_total}s\n&#x27;</span> localhost:8080/products/1
+curl -w <span class="str">&#x27;\n%{time_total}s\n&#x27;</span> localhost:8080/products/1</code></pre>
+<pre><code>{&quot;id&quot;:1,&quot;name&quot;:&quot;iPhone&quot;,&quot;price&quot;:1200.0}
+1.009s
+{&quot;id&quot;:1,&quot;name&quot;:&quot;iPhone&quot;,&quot;price&quot;:1200.0}
+0.004s</code></pre>
+<div class="img-container">
+  <img src="images/step1-hashmap-hit.png" alt="The same three requests with the HashMap: 1 s 209 ms, then 8 ms and 7 ms">
+  <div class="img-caption">The same three requests with the HashMap: 1 s 209 ms, then 8 ms and 7 ms</div>
+</div>
+<p>First call ~1 s, every call after that a few milliseconds. <strong>So… are we done?</strong></p>
+<h3 id="step1-what-is-wrong">What Is Wrong With the HashMap Cache?</h3>
+<ul>
+<li><code>HashMap</code> is <strong>not thread-safe</strong> - concurrent <code>put</code>s can corrupt it</li>
+<li><strong>No TTL, no maximum size, no eviction</strong> - memory grows forever</li>
+<li>No statistics, no loading coordination (two concurrent misses = two loads)</li>
+<li>No invalidation strategy</li>
+<li>No distributed behaviour - every JVM has its own copy</li>
+</ul>
+<p>The two that hurt in production are thread-safety and unbounded growth. The rest are the reasons a cache library exists.</p>
+<p>Demonstrate the growth: because the repository still returns a product for <em>any</em> id, this loop keeps adding entries and nothing ever removes one:</p>
+<pre><code><span class="kw">for</span> id <span class="kw">in</span> <span class="kw">$(</span>seq <span class="num">1</span> <span class="num">100000</span><span class="kw">)</span>; <span class="kw">do</span> curl -s localhost:8080/products/<span class="prop">$id</span> &gt; /dev/null; <span class="kw">done</span></code></pre>
+<p>Let it run for a few seconds, stop it, and say it out loud: <em>nothing in this class knows how to forget.</em></p>
+<div class="callout note">
+  <div class="callout-label">&#128221; Checkpoint</div>
+<p>Tag <code>stage-01-hashmap</code>.</p>
+</div>
+<h3 id="step1-concurrenthashmap">A Slightly Better Naive Cache: ConcurrentHashMap</h3>
+<p>Two changes: <code>ConcurrentHashMap</code> instead of <code>HashMap</code>, and <code>computeIfAbsent</code> instead of the manual get/put dance:</p>
+<pre><code><span class="kw">package</span> gr.skg.cachejavameetup;
+
+<span class="kw">import</span> org.springframework.stereotype.Service;
+
+<span class="kw">import</span> java.util.Map;
+<span class="kw">import</span> java.util.concurrent.ConcurrentHashMap;
+
+<span class="ann">@Service</span>
+<span class="kw">public</span> <span class="kw">class</span> <span class="typ">ProductService</span> {
+   <span class="kw">private</span> <span class="kw">final</span> ProductRepository productRepository;
+   <span class="cm">// Simple Cache, but thread safe</span>
+   <span class="kw">private</span> <span class="kw">final</span> Map&lt;Long, Product&gt; cache = <span class="kw">new</span> ConcurrentHashMap&lt;&gt;();
+
+   <span class="kw">public</span> <span class="fn">ProductService</span>(ProductRepository productRepository) {<span class="kw">this</span>.<span class="attr">productRepository</span> = productRepository;}
+
+   <span class="kw">public</span> Product <span class="fn">getProduct</span>(Long id) {
+      <span class="cm">// Thread Safe operation, and more elegant</span>
+      <span class="kw">return</span> cache.<span class="attr">computeIfAbsent</span>(id, productRepository::findById);
+   }
+}</code></pre>
+<p>Compact, thread-safe, one line - and <code>computeIfAbsent</code> even gives us <strong>per-key loading coordination</strong>: two concurrent requests for the same id result in one repository call, the second one waits.</p>
+<p>Now ask the question that this step cannot answer:</p>
+<blockquote>
+<p>When does this value disappear from memory?</p>
+</blockquote>
+<p>It does not - unless we explicitly remove it. That is the bridge to <strong>eviction</strong> and <strong>expiration</strong>.</p>
+<div class="callout note">
+  <div class="callout-label">&#128221; Checkpoint</div>
+<p>Tag <code>stage-02-concurrenthashmap</code>.</p>
+</div>
+<hr />
+<h2 id="step2"><span class="step-badge">Step 2</span> A Real Local Cache - Caffeine</h2>
+<p><a href="https://github.com/ben-manes/caffeine">Caffeine</a> is the de-facto in-memory cache for Java: a <code>ConcurrentHashMap</code> with policies around the data. In this step we add it in three small increments: basic usage, policies &amp; statistics, and <code>LoadingCache</code> with background refresh.</p>
+<h3 id="step2-dependency">Add the Dependency</h3>
+<p>Spring Boot manages the Caffeine version, so no <code>&lt;version&gt;</code> is needed:</p>
+<pre><code><span class="tag">&lt;dependency</span><span class="tag">&gt;</span>
+   <span class="tag">&lt;groupId</span><span class="tag">&gt;</span>com.github.ben-manes.caffeine<span class="tag">&lt;/groupId&gt;</span>
+   <span class="tag">&lt;artifactId</span><span class="tag">&gt;</span>caffeine<span class="tag">&lt;/artifactId&gt;</span>
+<span class="tag">&lt;/dependency&gt;</span></code></pre>
+<h3 id="step2-basic-usage">Caffeine Instead of ConcurrentHashMap</h3>
+<p>The shape of the service does not change. The <code>Map</code> becomes a <code>Cache</code>, and <code>computeIfAbsent</code> becomes <code>cache.get(key, loader)</code>:</p>
+<pre><code><span class="kw">package</span> gr.skg.cachejavameetup;
+
+<span class="kw">import</span> com.github.benmanes.caffeine.cache.Cache;
+<span class="kw">import</span> com.github.benmanes.caffeine.cache.Caffeine;
+<span class="kw">import</span> org.springframework.stereotype.Service;
+
+<span class="kw">import</span> java.time.Duration;
+
+<span class="ann">@Service</span>
+<span class="kw">public</span> <span class="kw">class</span> <span class="typ">ProductService</span> {
+   <span class="kw">private</span> <span class="kw">final</span> ProductRepository productRepository;
+   <span class="cm">// Local cache with Caffeine</span>
+   Cache&lt;Long, Product&gt; cache = Caffeine.<span class="attr">newBuilder</span>()
+         .<span class="attr">maximumSize</span>(<span class="num">10</span>)
+         .<span class="attr">expireAfterWrite</span>(Duration.<span class="attr">ofMinutes</span>(<span class="num">1</span>)) <span class="cm">// keep for a fixed duration</span>
+         <span class="cm">// .expireAfterAccess(Duration.ofMinutes(1)) // keep frequently accessed data</span>
+         .<span class="attr">build</span>();
+
+   <span class="kw">public</span> <span class="fn">ProductService</span>(ProductRepository productRepository) {<span class="kw">this</span>.<span class="attr">productRepository</span> = productRepository;}
+
+   <span class="kw">public</span> Product <span class="fn">getProduct</span>(Long id) {
+      <span class="cm">// Thread Safe operation, and more elegant</span>
+      <span class="kw">return</span> cache.<span class="attr">get</span>(id, productRepository::findById);
+   }
+}</code></pre>
+<p>Restart, run the two curls: same behaviour as before (1 s, then 0 ms) - but now the cache has a <strong>bound</strong> (<code>maximumSize(10)</code>) and a <strong>lifetime</strong> (<code>expireAfterWrite(1m)</code>).</p>
+<ul>
+<li><code>maximumSize</code> - bounded memory; when exceeded, Caffeine evicts the entries least likely to be used again (its Window-TinyLFU policy)</li>
+<li><code>expireAfterWrite</code> - fixed lifetime from the moment the entry was written</li>
+<li><code>expireAfterAccess</code> - lifetime resets on every read; keeps <em>hot</em> entries alive</li>
+</ul>
+<div class="callout tip">
+  <div class="callout-label">&#128161; Tip</div>
+<p>A cache library is not just a <code>Map</code>. It is a <code>Map</code> <strong>with policies around the data</strong>.</p>
+</div>
+<div class="callout note">
+  <div class="callout-label">&#128221; Checkpoint</div>
+<p>Tag <code>stage-03-caffeine</code>.</p>
+</div>
+<h3 id="step2-eviction-stats">Eviction Listener and Statistics</h3>
+<p>Two more builder calls make the cache observable: an <code>evictionListener</code> prints every entry that leaves, and <code>recordStats()</code> turns hit/miss/load/eviction counts on.</p>
+<pre><code><span class="cm">// Local cache with Caffeine</span>
+Cache&lt;Long, Product&gt; cache = Caffeine.<span class="attr">newBuilder</span>()
+      .<span class="attr">maximumSize</span>(<span class="num">10</span>)
+      .<span class="attr">expireAfterWrite</span>(Duration.<span class="attr">ofMinutes</span>(<span class="num">1</span>)) <span class="cm">// keep for a fixed duration</span>
+      <span class="cm">// .expireAfterAccess(Duration.ofMinutes(1)) // keep frequently accessed data</span>
+      .<span class="attr">evictionListener</span>((key, value, cause) -&gt; {
+         System.<span class="attr">out</span>.<span class="attr">println</span>(<span class="str">&quot;</span><span class="str">Evicting product: </span><span class="str">&quot;</span> + key);
+      })
+      .<span class="attr">recordStats</span>()
+      .<span class="attr">build</span>();</code></pre>
+<p>Two endpoints in <code>ProductController</code> expose the cache contents and the statistics (the <code>cache</code> field is package-private for exactly this reason - fine for a demo, not for production):</p>
+<pre><code><span class="ann">@GetMapping</span>(<span class="str">&quot;</span><span class="str">/cache</span><span class="str">&quot;</span>)
+<span class="kw">public</span> Map&lt;Long, Product&gt; <span class="fn">cacheContents</span>() {
+   <span class="kw">return</span> <span class="kw">new</span> HashMap&lt;&gt;(productService.<span class="attr">cache</span>.<span class="attr">asMap</span>());
+}
+
+<span class="ann">@GetMapping</span>(<span class="str">&quot;</span><span class="str">/cache/stats</span><span class="str">&quot;</span>)
+<span class="kw">public</span> String <span class="fn">cacheStats</span>() {
+   <span class="kw">return</span> productService.<span class="attr">cache</span>.<span class="attr">stats</span>().<span class="attr">toString</span>();
+}</code></pre>
+<p>Restart, request product 1 three times, then ask for the statistics:</p>
+<pre><code>curl localhost:8080/products/1
+curl localhost:8080/products/1
+curl localhost:8080/products/1
+curl localhost:8080/products/cache/stats</code></pre>
+<pre><code>CacheStats{hitCount=2, missCount=1, loadSuccessCount=1, loadFailureCount=0, totalLoadTime=1010992200, evictionCount=0, evictionWeight=0}</code></pre>
+<div class="img-container">
+  <img src="images/step2-cache-stats.png" alt="Cache statistics after the three-request loop: one miss, two hits, one load of ~1 s">
+  <div class="img-caption">Cache statistics after the three-request loop: one miss, two hits, one load of ~1 s</div>
+</div>
+<p>One miss, two hits, one load that took about a second (<code>totalLoadTime</code> is in nanoseconds). Now watch an entry <em>leave</em>. The simplest way is expiration: request product 1, wait a little more than a minute (<code>expireAfterWrite(1m)</code>), and request it again. The second request finds an expired entry, evicts it, reloads it - and the listener prints:</p>
+<pre><code>Evicting product: 1</code></pre>
+<div class="img-container">
+  <img src="images/step2-eviction-log.png" alt="The eviction listener fires on the first request after the entry expired">
+  <div class="img-caption">The eviction listener fires on the first request after the entry expired</div>
+</div>
+<p>The other way is size: the repository still returns a product for any id, so requesting ids 1 to 11 exceeds <code>maximumSize(10)</code> and one of them is evicted.</p>
+<pre><code><span class="kw">for</span> id <span class="kw">in</span> <span class="kw">$(</span>seq <span class="num">1</span> <span class="num">11</span><span class="kw">)</span>; <span class="kw">do</span> curl -s localhost:8080/products/<span class="prop">$id</span> &gt; /dev/null; <span class="kw">done</span>
+curl localhost:8080/products/cache</code></pre>
+<div class="callout warning">
+  <div class="callout-label">&#9888;&#65039; Caffeine evicts lazily and asynchronously</div>
+<p>An entry that expired at 1:00 is removed (and the listener called) on the <em>next read or write</em>, not by a timer - if you wait for the log line without making a request, it will not appear. Likewise the size-based <code>Evicting product: …</code> line may appear on a later request rather than exactly on the 11th, and which key gets evicted depends on the frequency sketch, not on insertion order.</p>
+</div>
+<p><code>recordStats</code> is what turns a cache from a hope into something measurable: hit ratio, load count, evictions. In production these numbers go to Micrometer (<code>CaffeineCacheMetrics</code>), not to <code>System.out</code>.</p>
+<div class="callout note">
+  <div class="callout-label">&#128221; Checkpoint</div>
+<p>Tag <code>stage-04-caffeine-stats</code>.</p>
+</div>
+<h3 id="step2-loadingcache-refresh">LoadingCache and refreshAfterWrite</h3>
+<p>So far the <em>call site</em> knows how to load a missing value (<code>cache.get(id, productRepository::findById)</code>). A <code>LoadingCache</code> moves the loader into the cache itself, and unlocks <code>refreshAfterWrite</code>:</p>
+<pre><code><span class="kw">package</span> gr.skg.cachejavameetup;
+
+<span class="kw">import</span> com.github.benmanes.caffeine.cache.Caffeine;
+<span class="kw">import</span> com.github.benmanes.caffeine.cache.LoadingCache;
+<span class="kw">import</span> org.springframework.stereotype.Service;
+
+<span class="kw">import</span> java.time.Duration;
+
+<span class="ann">@Service</span>
+<span class="kw">public</span> <span class="kw">class</span> <span class="typ">ProductService</span> {
+   <span class="kw">private</span> <span class="kw">final</span> ProductRepository productRepository;
+   <span class="cm">// Loading cache with Caffeine</span>
+   <span class="kw">final</span> LoadingCache&lt;Long, Product&gt; cache;
+
+   <span class="kw">public</span> <span class="fn">ProductService</span>(ProductRepository productRepository) {
+      <span class="kw">this</span>.<span class="attr">productRepository</span> = productRepository;
+      <span class="kw">this</span>.<span class="attr">cache</span> = Caffeine.<span class="attr">newBuilder</span>()
+            .<span class="attr">maximumSize</span>(<span class="num">10</span>)
+            .<span class="attr">refreshAfterWrite</span>(Duration.<span class="attr">ofSeconds</span>(<span class="num">10</span>)) <span class="cm">// refresh is useful, to keep data &quot;fresh&quot;</span>
+            .<span class="attr">expireAfterWrite</span>(Duration.<span class="attr">ofMinutes</span>(<span class="num">1</span>)) <span class="cm">// keep for a fixed duration</span>
+            <span class="cm">// .expireAfterAccess(Duration.ofMinutes(1)) // keep frequently accessed data</span>
+            .<span class="attr">evictionListener</span>((key, value, cause) -&gt; {
+               System.<span class="attr">out</span>.<span class="attr">println</span>(<span class="str">&quot;</span><span class="str">Evicting product: </span><span class="str">&quot;</span> + key);
+            })
+            .<span class="attr">recordStats</span>()
+            .<span class="attr">build</span>(productRepository::findById);
+   }
+
+   <span class="kw">public</span> Product <span class="fn">getProduct</span>(Long id) {
+      <span class="cm">// The cache now knows how to obtain a missing value.</span>
+      <span class="kw">return</span> cache.<span class="attr">get</span>(id);
+   }
+
+}</code></pre>
+<p>The service method is now literally one line: <code>cache.get(id)</code>. The cache knows how to obtain a missing value.</p>
+<p>The interesting part is the combination of the two time policies:</p>
+<ul>
+<li><code>refreshAfterWrite(10s)</code> - after 10 seconds, the <strong>next read returns the old value immediately</strong> and triggers an asynchronous reload in the background. The caller never waits.</li>
+<li><code>expireAfterWrite(1m)</code> - after 1 minute the entry is gone for real; the next read blocks on the loader.</li>
+</ul>
+<p>Together they mean: hot keys stay fresh without ever blocking a request; cold keys simply expire. This is the difference between <em>"expire and block"</em> and <em>"keep serving while reloading"</em>.</p>
+<div class="callout warning">
+  <div class="callout-label">&#9888;&#65039; Warning</div>
+<p><code>refreshAfterWrite</code> is <strong>on-access</strong>: nothing happens at the 10-second mark unless somebody reads the key. Try it: request product 1, wait 10+ seconds, request it again. The second request is still instant - the reload happens in the background - so if you want to <em>see</em> it, add a <code>System.out.println</code> inside <code>ProductRepository.findById</code>.</p>
+</div>
+<div class="callout note">
+  <div class="callout-label">&#128221; Checkpoint</div>
+<p>Tag <code>stage-05-loadingcache</code>.</p>
+</div>
+<h3 id="step2-local-cache-topology">Local Cache Topology - What Happens on 10 Pods?</h3>
+<p>Everything so far lives in the JVM heap. That is also its limitation:</p>
+<pre><code>Instance A              Instance B
+---------               ---------
+Caffeine                Caffeine
+{1 -&gt; Product}          {}</code></pre>
+<p>The same request reaching instance B is a <strong>MISS</strong>. With 10 pods we warm 10 caches, and we can serve 10 different prices for the same product. Sometimes that is fine; sometimes it is not. That is the motivation for a <strong>shared</strong> cache.</p>
+<hr />
+<h2 id="step3"><span class="step-badge">Step 3</span> A Shared Cache - Redis</h2>
+<p><a href="https://redis.io/">Redis</a> is an in-memory data store that runs as a separate process and is shared by all application instances. In this step we use it "by hand", with <code>RedisTemplate</code>, so that later the Spring Cache abstraction has something to hide.</p>
+<h3 id="step3-advantages-costs">Shared Cache: Advantages and Costs</h3>
+<pre><code>      Redis
+  /     |     \
+App A  App B  App C</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Advantages</th>
+<th>Costs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Shared values across instances</td>
+<td>A network call on every read</td>
+</tr>
+<tr>
+<td>Survives application restarts</td>
+<td>Serialization / deserialization</td>
+</tr>
+<tr>
+<td>Centralised TTL</td>
+<td>Infrastructure to run and monitor</td>
+</tr>
+<tr>
+<td>Bigger than one JVM heap</td>
+<td>Availability becomes your problem</td>
+</tr>
+</tbody>
+</table></div>
+<div class="callout important">
+  <div class="callout-label">&#9888;&#65039; Important</div>
+<p>Redis is usually much faster than the database, but it is still a <strong>network call plus a serialization step</strong>. Caffeine is an in-process memory access. Keep both columns visible: the right column is why we do not default to Redis.</p>
+</div>
+<h3 id="step3-docker-compose">Start Redis with Docker Compose</h3>
+<p>Create <code>compose.yaml</code> in the project root:</p>
+<pre><code><span class="tag">services</span>:
+  <span class="tag">redis</span>:
+    <span class="tag">image</span>: redis:7-alpine
+    <span class="tag">ports</span>:
+      - <span class="str">&quot;</span><span class="str">6379:6379</span><span class="str">&quot;</span></code></pre>
+<pre><code>docker compose up -d
+docker compose <span class="kw">exec</span> redis redis-cli ping     <span class="cm"># PONG
+</span></code></pre>
+<div class="img-container">
+  <img src="images/step3-docker-compose.png" alt="compose.yaml deployed from IntelliJ's Services window, and PONG from redis-cli">
+  <div class="img-caption">compose.yaml deployed from IntelliJ's Services window, and PONG from redis-cli</div>
+</div>
+<div class="callout tip">
+  <div class="callout-label">&#128161; Tip</div>
+<p>IntelliJ's <strong>Services</strong> tool window shows the compose services with <em>Deploy / Restart / Stop / Down</em> actions (the run icon in the gutter of <code>compose.yaml</code> does the same as <code>docker compose up -d</code>). <em>Restart</em> keeps the container (and its data); <em>Down</em> deletes it. Spring Boot's Docker Compose support (<code>spring-boot-docker-compose</code>) could start Redis automatically, but we keep it explicit here so it is clear what is running.</p>
+</div>
+<h3 id="step3-dependency">Add the Dependency</h3>
+<pre><code><span class="tag">&lt;dependency</span><span class="tag">&gt;</span>
+   <span class="tag">&lt;groupId</span><span class="tag">&gt;</span>org.springframework.boot<span class="tag">&lt;/groupId&gt;</span>
+   <span class="tag">&lt;artifactId</span><span class="tag">&gt;</span>spring-boot-starter-data-redis<span class="tag">&lt;/artifactId&gt;</span>
+<span class="tag">&lt;/dependency&gt;</span></code></pre>
+<p>No <code>application.yaml</code> changes are needed: Spring Boot defaults to <code>spring.data.redis.host=localhost</code> and <code>port=6379</code>.</p>
+<h3 id="step3-serializer">Redis Needs a Serializer</h3>
+<p>The first thing Redis forces on you is <strong>serialization</strong>. A <code>RedisTemplate</code> uses Java serialization for keys <em>and</em> values by default - which fails for a record with <code>DefaultSerializer requires a Serializable payload</code>, and produces unreadable keys like <code>\xac\xed\x00\x05t\x00\tproduct:1</code> in <code>redis-cli</code>.</p>
+<p>First make <code>Product</code> public so Jackson can see it:</p>
+<pre><code><span class="kw">package</span> gr.skg.cachejavameetup;
+
+<span class="kw">public</span> <span class="kw">record</span> <span class="typ">Product</span>(Long id, String name, Double price) {}</code></pre>
+<p>Then create <code>RedisConfig.java</code> with a typed template: <code>String</code> keys, JSON values:</p>
+<pre><code><span class="kw">package</span> gr.skg.cachejavameetup;
+
+<span class="kw">import</span> org.springframework.context.annotation.Bean;
+<span class="kw">import</span> org.springframework.context.annotation.Configuration;
+<span class="kw">import</span> org.springframework.data.redis.connection.RedisConnectionFactory;
+<span class="kw">import</span> org.springframework.data.redis.core.RedisTemplate;
+<span class="kw">import</span> org.springframework.data.redis.serializer.JacksonJsonRedisSerializer;
+<span class="kw">import</span> org.springframework.data.redis.serializer.StringRedisSerializer;
+
+<span class="cm">/**
+ * Redis Config.
+ * By default, spring boot gives the properties
+ * spring.data.redis.host=localhost &amp; port=6379
+ * so no extra yml config needed
+ */</span>
+<span class="ann">@Configuration</span>
+<span class="kw">public</span> <span class="kw">class</span> <span class="typ">RedisConfig</span> {
+   <span class="ann">@Bean</span>
+   RedisTemplate&lt;String, Product&gt; <span class="fn">productRedisTemplate</span>(RedisConnectionFactory connectionFactory) {
+      <span class="cm">// Note: this can be generic for Object, but then &#x27;casting&#x27; and custom &#x27;serializer&#x27;</span>
+      <span class="cm">// are needed, to include the whole class in the key. For example:</span>
+      <span class="cm">// {&quot;@class&quot;:&quot;gr.skg.cachejavameetup.Product&quot;,&quot;id&quot;:1,&quot;name&quot;:&quot;iPhone 16&quot;,&quot;price&quot;:1200.0}</span>
+      <span class="cm">// vs {&quot;id&quot;:1,&quot;name&quot;:&quot;iPhone 16&quot;,&quot;price&quot;:1200.0}</span>
+      RedisTemplate&lt;String, Product&gt; template = <span class="kw">new</span> RedisTemplate&lt;&gt;();
+      template.<span class="attr">setConnectionFactory</span>(connectionFactory);
+      template.<span class="attr">setKeySerializer</span>(<span class="kw">new</span> StringRedisSerializer());
+      template.<span class="attr">setValueSerializer</span>(<span class="kw">new</span> JacksonJsonRedisSerializer&lt;&gt;(Product.<span class="attr">class</span>));
+      <span class="kw">return</span> template;
+   }
+}</code></pre>
+<div class="callout note">
+  <div class="callout-label">&#128221; Spring Boot 4 / Jackson 3</div>
+<p>The serializer class is <code>JacksonJsonRedisSerializer</code> (package <code>org.springframework.data.redis.serializer</code>). The <code>Jackson2JsonRedisSerializer</code> / <code>GenericJackson2JsonRedisSerializer</code> classes you will find in most blog posts are the Boot 3 / Jackson 2 variants and are deprecated in Spring Data Redis 4. The typed serializer is the simplest option; the generic one needs default typing (<code>@class</code> property) to deserialize back to your type, and in 4.x that is off unless you enable it explicitly through its builder.</p>
+</div>
+<h3 id="step3-realistic-repository">A Realistic Repository</h3>
+<p>From this step on, the repository is a real (if tiny) catalogue: 10 seeded products in a <code>ConcurrentHashMap</code>, and an exception for unknown ids. It still sleeps for one second.</p>
+<pre><code><span class="kw">package</span> gr.skg.cachejavameetup;
+
+<span class="kw">import</span> org.springframework.stereotype.Repository;
+
+<span class="kw">import</span> java.util.Map;
+<span class="kw">import</span> java.util.concurrent.ConcurrentHashMap;
+
+<span class="cm">/**
+ * A deliberately slow repository/service simulates an expensive dependency
+ */</span>
+<span class="ann">@Repository</span>
+<span class="kw">class</span> <span class="typ">ProductRepository</span> {
+
+   <span class="kw">private</span> <span class="kw">final</span> Map&lt;Long, Product&gt; db = <span class="kw">new</span> ConcurrentHashMap&lt;&gt;();
+
+   <span class="kw">public</span> <span class="fn">ProductRepository</span>() {
+      db.<span class="attr">put</span>(<span class="num">1L</span>, <span class="kw">new</span> Product(<span class="num">1L</span>, <span class="str">&quot;</span><span class="str">iPhone 16</span><span class="str">&quot;</span>, <span class="num">1200.0</span>));
+      db.<span class="attr">put</span>(<span class="num">2L</span>, <span class="kw">new</span> Product(<span class="num">2L</span>, <span class="str">&quot;</span><span class="str">MacBook Air M3</span><span class="str">&quot;</span>, <span class="num">1350.0</span>));
+      db.<span class="attr">put</span>(<span class="num">3L</span>, <span class="kw">new</span> Product(<span class="num">3L</span>, <span class="str">&quot;</span><span class="str">Mechanical Keyboard</span><span class="str">&quot;</span>, <span class="num">129.99</span>));
+      db.<span class="attr">put</span>(<span class="num">4L</span>, <span class="kw">new</span> Product(<span class="num">4L</span>, <span class="str">&quot;</span><span class="str">Wireless Mouse</span><span class="str">&quot;</span>, <span class="num">49.90</span>));
+      db.<span class="attr">put</span>(<span class="num">5L</span>, <span class="kw">new</span> Product(<span class="num">5L</span>, <span class="str">&quot;</span><span class="str">27</span><span class="str">\&quot;</span><span class="str"> 4K Monitor</span><span class="str">&quot;</span>, <span class="num">399.00</span>));
+      db.<span class="attr">put</span>(<span class="num">6L</span>, <span class="kw">new</span> Product(<span class="num">6L</span>, <span class="str">&quot;</span><span class="str">USB-C Docking Station</span><span class="str">&quot;</span>, <span class="num">179.50</span>));
+      db.<span class="attr">put</span>(<span class="num">7L</span>, <span class="kw">new</span> Product(<span class="num">7L</span>, <span class="str">&quot;</span><span class="str">Noise Cancelling Headphones</span><span class="str">&quot;</span>, <span class="num">299.00</span>));
+      db.<span class="attr">put</span>(<span class="num">8L</span>, <span class="kw">new</span> Product(<span class="num">8L</span>, <span class="str">&quot;</span><span class="str">Webcam 1080p</span><span class="str">&quot;</span>, <span class="num">79.00</span>));
+      db.<span class="attr">put</span>(<span class="num">9L</span>, <span class="kw">new</span> Product(<span class="num">9L</span>, <span class="str">&quot;</span><span class="str">Ergonomic Office Chair</span><span class="str">&quot;</span>, <span class="num">450.00</span>));
+      db.<span class="attr">put</span>(<span class="num">10L</span>, <span class="kw">new</span> Product(<span class="num">10L</span>, <span class="str">&quot;</span><span class="str">Standing Desk</span><span class="str">&quot;</span>, <span class="num">620.00</span>));
+   }
+
+   <span class="kw">public</span> Product <span class="fn">findById</span>(Long id) {
+      <span class="cm">// simulate delay (1s)</span>
+      dbSlowOperation();
+
+      Product product = db.<span class="attr">get</span>(id);
+      <span class="kw">if</span> (product == <span class="kw">null</span>) {
+         <span class="kw">throw</span> <span class="kw">new</span> RuntimeException(<span class="str">&quot;</span><span class="str">Product Not Found: </span><span class="str">&quot;</span> + id);
+      }
+      <span class="kw">return</span> product;
+   }
+
+   <span class="kw">private</span> <span class="typ">void</span> <span class="fn">dbSlowOperation</span>() {
+      <span class="kw">try</span> {
+         Thread.<span class="attr">sleep</span>(<span class="num">1</span> * <span class="num">1000</span>);
+      } <span class="kw">catch</span> (InterruptedException e) {
+         <span class="kw">throw</span> <span class="kw">new</span> RuntimeException(e);
+      }
+   }
+}</code></pre>
+<div class="callout warning">
+  <div class="callout-label">&#9888;&#65039; Warning</div>
+<p>From here on, only ids <strong>1 to 10</strong> exist. The "unbounded growth" loop of Step 1 would return HTTP 500 from id 11 onwards, which is why that demo belongs to Steps 1-2.</p>
+</div>
+<h3 id="step3-redis-by-hand">Redis, by Hand</h3>
+<p>The service goes back to the <em>get → null-check → load → put</em> shape of Step 1, but the map is now on the other side of a socket, and the <code>set</code> carries a TTL:</p>
+<pre><code><span class="kw">package</span> gr.skg.cachejavameetup;
+
+<span class="kw">import</span> org.springframework.data.redis.core.RedisTemplate;
+<span class="kw">import</span> org.springframework.stereotype.Service;
+
+<span class="kw">import</span> java.time.Duration;
+<span class="kw">import</span> java.util.Set;
+
+<span class="ann">@Service</span>
+<span class="kw">public</span> <span class="kw">class</span> <span class="typ">ProductService</span> {
+   <span class="kw">private</span> <span class="kw">final</span> ProductRepository productRepository;
+   <span class="cm">// Shared Cache - Redis</span>
+   <span class="kw">private</span> <span class="kw">final</span> RedisTemplate&lt;String, Product&gt; redisTemplate;
+
+   <span class="kw">public</span> <span class="fn">ProductService</span>(ProductRepository productRepository,
+                         RedisTemplate&lt;String, Product&gt; redisTemplate) {
+      <span class="kw">this</span>.<span class="attr">productRepository</span> = productRepository;
+      <span class="kw">this</span>.<span class="attr">redisTemplate</span> = redisTemplate;
+   }
+
+   <span class="kw">public</span> Product <span class="fn">getProduct</span>(Long id) {
+      String key = <span class="str">&quot;</span><span class="str">product:</span><span class="str">&quot;</span> + id;
+
+      Product cached = redisTemplate.<span class="attr">opsForValue</span>().<span class="attr">get</span>(key);
+      <span class="kw">if</span> (cached != <span class="kw">null</span>) {
+         <span class="kw">return</span> cached;
+      }
+
+      Product product = productRepository.<span class="attr">findById</span>(id);
+      redisTemplate.<span class="attr">opsForValue</span>().<span class="attr">set</span>(key, product, Duration.<span class="attr">ofMinutes</span>(<span class="num">10</span>));
+      <span class="kw">return</span> product;
+   }
+
+   <span class="kw">public</span> Set&lt;String&gt; <span class="fn">cacheKeys</span>() {
+      <span class="kw">return</span> redisTemplate.<span class="attr">keys</span>(<span class="str">&quot;</span><span class="str">product:*</span><span class="str">&quot;</span>);
+   }
+
+}</code></pre>
+<p>And the controller's <code>/cache</code> endpoint now lists the Redis keys (the <code>/cache/stats</code> endpoint goes away - Redis keeps server-wide statistics, see the cheat sheet below):</p>
+<pre><code><span class="ann">@GetMapping</span>(<span class="str">&quot;</span><span class="str">/cache</span><span class="str">&quot;</span>)
+<span class="kw">public</span> Set&lt;String&gt; <span class="fn">cacheKeys</span>() {
+   <span class="kw">return</span> productService.<span class="attr">cacheKeys</span>();
+}</code></pre>
+<h3 id="step3-test-it">Test It</h3>
+<p>Open a second terminal with <code>MONITOR</code> running <strong>before</strong> the curls - it is the most convincing visual of this step, a live stream of every command the application sends to Redis:</p>
+<pre><code>docker compose <span class="kw">exec</span> redis redis-cli MONITOR</code></pre>
+<p>Then, in the first terminal:</p>
+<pre><code>docker compose <span class="kw">exec</span> redis redis-cli FLUSHALL
+curl -w <span class="str">&#x27;\n%{time_total}s\n&#x27;</span> localhost:8080/products/1      <span class="cm"># ~1 s
+</span>curl -w <span class="str">&#x27;\n%{time_total}s\n&#x27;</span> localhost:8080/products/1      <span class="cm"># ~0.00 s
+</span></code></pre>
+<p>The first request shows a <code>GET</code> (miss) followed by a <code>SET … PX 600000</code>; the second shows only a <code>GET</code>:</p>
+<pre><code>&quot;GET&quot; &quot;product:1&quot;
+&quot;SET&quot; &quot;product:1&quot; &quot;{\&quot;id\&quot;:1,\&quot;name\&quot;:\&quot;iPhone 16\&quot;,\&quot;price\&quot;:1200.0}&quot; &quot;PX&quot; &quot;600000&quot;
+&quot;GET&quot; &quot;product:1&quot;</code></pre>
+<p>Inspect the value and its remaining lifetime:</p>
+<pre><code>docker compose <span class="kw">exec</span> redis redis-cli GET product:1
+docker compose <span class="kw">exec</span> redis redis-cli TTL product:1</code></pre>
+<pre><code>&quot;{\&quot;id\&quot;:1,\&quot;name\&quot;:\&quot;iPhone 16\&quot;,\&quot;price\&quot;:1200.0}&quot;
+(integer) 587</code></pre>
+<div class="img-container">
+  <img src="images/step3-redis-monitor.png" alt="Top: MONITOR while the application serves two requests (GET, SET … PX 600000, GET). Bottom: the same commands replayed by hand in redis-cli -- GET returns (nil) before the SET and the JSON after it">
+  <div class="img-caption">Top: MONITOR while the application serves two requests (GET, SET … PX 600000, GET). Bottom: the same commands replayed by hand in redis-cli -- GET returns (nil) before the SET and the JSON after it</div>
+</div>
+<p>Now <strong>restart the application</strong> and request product 1 again: still a hit, ~0 ms. Caffeine would have lost everything; the cache now outlives the process.</p>
+<div class="callout note">
+  <div class="callout-label">&#128221; Checkpoint</div>
+<p>Tag <code>stage-06-redis</code>.</p>
+</div>
+<h3 id="step3-redis-uis">Redis UIs</h3>
+<p><code>redis-cli</code> is enough, but a UI makes keys, values and TTLs visible to the whole room. Extend <code>compose.yaml</code> with two of them:</p>
+<pre><code><span class="tag">services</span>:
+  <span class="tag">redis</span>:
+    <span class="tag">image</span>: redis:7-alpine
+    <span class="tag">ports</span>:
+      - <span class="str">&quot;</span><span class="str">6379:6379</span><span class="str">&quot;</span>
+
+  <span class="cm"># A very lightweight UI (~50mb) for Redis</span>
+  <span class="cm"># Open: http://localhost:8081/</span>
+  <span class="tag">redis-commander</span>:
+    <span class="tag">image</span>: rediscommander/redis-commander:latest
+    <span class="tag">environment</span>:
+      <span class="tag">REDIS_HOSTS</span>: local:redis:6379
+    <span class="tag">ports</span>:
+      - <span class="str">&quot;</span><span class="str">8081:8081</span><span class="str">&quot;</span>
+    <span class="tag">depends_on</span>:
+      - redis
+
+  <span class="cm"># The Official Redis Monitor UI.</span>
+  <span class="cm"># Open: http://localhost:5540/</span>
+  <span class="cm"># Set Connection URL: redis://default@redis:6379</span>
+  <span class="tag">redisinsight</span>:
+    <span class="tag">image</span>: redis/redisinsight:latest
+    <span class="tag">ports</span>:
+      - <span class="str">&quot;</span><span class="str">5540:5540</span><span class="str">&quot;</span>
+    <span class="tag">depends_on</span>:
+      - redis</code></pre>
+<pre><code>docker compose up -d      <span class="cm"># picks up the two new services
+</span></code></pre>
+<ul>
+<li><strong>Redis Commander</strong> (<a href="http://localhost:8081">localhost:8081</a>): a tree of keys, values, TTL and a built-in CLI. The lightest option, zero onboarding.</li>
+</ul>
+<div class="img-container">
+  <img src="images/step3-redis-commander.png" alt="Redis Commander: the product:* keys as a tree, with a CLI at the bottom">
+  <div class="img-caption">Redis Commander: the product:* keys as a tree, with a CLI at the bottom</div>
+</div>
+<ul>
+<li><strong>Redis Insight</strong> (<a href="http://localhost:5540">localhost:5540</a>): add a database with the connection URL <code>redis://default@redis:6379</code>. Richer: Browser, Workbench (CLI with autocomplete), Analyze (memory by key prefix, slow log) and Profiler (<code>MONITOR</code> with a UI).</li>
+</ul>
+<div class="img-container">
+  <img src="images/step3-redis-insight.png" alt="Redis Insight browser: the product keys grouped by prefix, each with its remaining TTL and size">
+  <div class="img-caption">Redis Insight browser: the product keys grouped by prefix, each with its remaining TTL and size</div>
+</div>
+<div class="callout tip">
+  <div class="callout-label">&#128161; Tip</div>
+<p>Inside a container, <code>127.0.0.1</code> is the container itself. That is why the connection URL uses the compose service name <code>redis</code>, not <code>localhost</code>.</p>
+</div>
+<div class="callout note">
+  <div class="callout-label">&#128221; Checkpoint</div>
+<p>Tag <code>stage-07-redis-ui</code>.</p>
+</div>
+<h3 id="step3-cheat-sheet">Redis Operations Cheat Sheet</h3>
+<pre><code>docker compose <span class="kw">exec</span> -it redis redis-cli      <span class="cm"># interactive shell
+</span></code></pre>
+<pre><code>PING                        # PONG
+DBSIZE                      # number of keys
+KEYS product:*              # keys of this step
+KEYS products::*            # keys of Spring Cache (Step 4)
+GET product:1               # JSON value
+TTL product:1               # seconds left, -1 = no expiry, -2 = missing
+DEL product:1               # manual invalidation
+FLUSHALL                    # clean start before a demo
+MONITOR                     # live stream of commands (Ctrl+C to stop)
+INFO stats                  # keyspace_hits / keyspace_misses (server-wide)
+INFO memory                 # used_memory_human
+CONFIG RESETSTAT            # reset the hit/miss counters (FLUSHALL does not)</code></pre>
+<div class="callout warning">
+  <div class="callout-label">&#9888;&#65039; Warning</div>
+<p><code>KEYS</code> is O(N) and blocks the server while it scans. Fine for 10 keys in a demo; use <code>SCAN</code> in production.</p>
+</div>
+<p><strong>Does a Redis restart clear the data?</strong> No. The <code>redis:7-alpine</code> image runs with default RDB snapshotting, writes <code>dump.rdb</code> on a graceful shutdown, and the container keeps its filesystem - so <code>docker compose restart</code> brings the keys back, TTLs included. Data is lost on <code>docker compose down</code> (container deleted). To make every restart start clean, disable persistence:</p>
+<pre><code><span class="tag">redis</span>:
+  <span class="tag">image</span>: redis:7-alpine
+  <span class="tag">command</span>: [<span class="str">&quot;</span><span class="str">redis-server</span><span class="str">&quot;</span>, <span class="str">&quot;</span><span class="str">--save</span><span class="str">&quot;</span>, <span class="str">&quot;</span><span class="str">&quot;</span>, <span class="str">&quot;</span><span class="str">--appendonly</span><span class="str">&quot;</span>, <span class="str">&quot;</span><span class="str">no</span><span class="str">&quot;</span>]</code></pre>
+<p>For the workshop, <code>FLUSHALL</code> is the fastest clean start and does not interrupt the application's connection.</p>
+<h3 id="step3-boilerplate">Do We Really Want This Boilerplate?</h3>
+<p>Look at what we have written so far:</p>
+<ul>
+<li><code>if cached … load … put</code> - the same five lines, three times: <code>HashMap</code>, Caffeine, Redis</li>
+<li>Serialization details leaking into a service class</li>
+<li>A business method that is now <em>mostly</em> caching</li>
+</ul>
+<p>This is exactly the problem the Spring Cache abstraction solves.</p>
+<hr />
+<h2 id="step4"><span class="step-badge">Step 4</span> The Spring Cache Abstraction - @Cacheable and Three Providers</h2>
+<p>Spring's cache abstraction moves the caching code out of the business method and into an annotation, and moves the <em>where do values live</em> decision into configuration. In this step the Java method stays identical while we switch the provider three times: <code>ConcurrentMap</code> → Caffeine → Redis.</p>
+<h3 id="step4-cacheable-is-not-a-cache">@Cacheable Is Not a Cache</h3>
+<p>The single most important idea of this step:</p>
+<pre><code>@Cacheable
+     ↓
+Spring Cache abstraction
+     ↓
+CacheManager
+     ↓
+Actual cache implementation (ConcurrentMap / Caffeine / Redis / JCache …)</code></pre>
+<p><code>@Cacheable</code> <strong>describes</strong> caching behaviour. The <code>CacheManager</code> <strong>decides</strong> where the values actually live. Everything we built by hand in Steps 1-3 becomes a <em>provider</em> behind that line.</p>
+<h3 id="step4-dependency">Add the Dependency</h3>
+<pre><code><span class="tag">&lt;dependency</span><span class="tag">&gt;</span>
+   <span class="tag">&lt;groupId</span><span class="tag">&gt;</span>org.springframework.boot<span class="tag">&lt;/groupId&gt;</span>
+   <span class="tag">&lt;artifactId</span><span class="tag">&gt;</span>spring-boot-starter-cache<span class="tag">&lt;/artifactId&gt;</span>
+<span class="tag">&lt;/dependency&gt;</span></code></pre>
+<div class="callout important">
+  <div class="callout-label">&#9888;&#65039; Spring Boot 4 needs this starter</div>
+<p>The cache auto-configuration lives in the <code>spring-boot-cache</code> module, which only this starter brings in. Without it, <code>@EnableCaching</code> compiles, the application starts, and no <code>CacheManager</code> is created - the annotation is silently ignored.</p>
+</div>
+<h3 id="step4-enable-caching">Enable Caching and Prove Which Provider Is Active</h3>
+<p><code>@EnableCaching</code> on the application class turns the annotations on. The <code>ApplicationRunner</code> is not required - it only prints the active <code>CacheManager</code> and the native cache class at startup, so nobody has to take our word for which provider is in use:</p>
+<pre><code><span class="kw">package</span> gr.skg.cachejavameetup;
+
+<span class="kw">import</span> org.springframework.boot.ApplicationRunner;
+<span class="kw">import</span> org.springframework.boot.SpringApplication;
+<span class="kw">import</span> org.springframework.boot.autoconfigure.SpringBootApplication;
+<span class="kw">import</span> org.springframework.cache.CacheManager;
+<span class="kw">import</span> org.springframework.cache.annotation.EnableCaching;
+<span class="kw">import</span> org.springframework.context.annotation.Bean;
+
+<span class="ann">@EnableCaching</span>
+<span class="ann">@SpringBootApplication</span>
+<span class="kw">public</span> <span class="kw">class</span> <span class="typ">App</span> {
+
+   <span class="kw">public</span> <span class="kw">static</span> <span class="typ">void</span> <span class="fn">main</span>(String[] args) {
+      SpringApplication.<span class="attr">run</span>(App.<span class="attr">class</span>, args);
+   }
+
+   <span class="cm">// Not required. It&#x27;s just to log the CacheManager implementation</span>
+   <span class="ann">@Bean</span>
+   ApplicationRunner <span class="fn">logCacheManager</span>(CacheManager cacheManager) {
+      <span class="kw">return</span> args -&gt; {
+         <span class="kw">var</span> cache = cacheManager.<span class="attr">getCache</span>(<span class="str">&quot;</span><span class="str">products</span><span class="str">&quot;</span>);
+         System.<span class="attr">out</span>.<span class="attr">println</span>(<span class="str">&quot;</span><span class="str">CacheManager: </span><span class="str">&quot;</span> + cacheManager.<span class="attr">getClass</span>().<span class="attr">getSimpleName</span>());
+         System.<span class="attr">out</span>.<span class="attr">println</span>(<span class="str">&quot;</span><span class="str">Native cache: </span><span class="str">&quot;</span> + cache.<span class="attr">getNativeCache</span>().<span class="attr">getClass</span>().<span class="attr">getName</span>());
+      };
+   }
+
+}</code></pre>
+<h3 id="step4-the-reveal">The Reveal: The Service Is One Line Again</h3>
+<p>Delete <code>RedisConfig.java</code> and the <code>/cache</code> endpoint in the controller. The service becomes:</p>
+<pre><code><span class="kw">package</span> gr.skg.cachejavameetup;
+
+<span class="kw">import</span> org.springframework.cache.annotation.Cacheable;
+<span class="kw">import</span> org.springframework.stereotype.Service;
+
+<span class="ann">@Service</span>
+<span class="kw">public</span> <span class="kw">class</span> <span class="typ">ProductService</span> {
+   <span class="kw">private</span> <span class="kw">final</span> ProductRepository productRepository;
+
+   <span class="kw">public</span> <span class="fn">ProductService</span>(ProductRepository productRepository) {
+      <span class="kw">this</span>.<span class="attr">productRepository</span> = productRepository;
+   }
+
+   <span class="ann">@Cacheable</span>(<span class="str">&quot;</span><span class="str">products</span><span class="str">&quot;</span>)
+   <span class="kw">public</span> Product <span class="fn">getProduct</span>(Long id) {
+      <span class="kw">return</span> productRepository.<span class="attr">findById</span>(id);
+   }
+
+}</code></pre>
+<h3 id="step4-behind-cacheable">What Happens Behind @Cacheable</h3>
+<p>Nothing magic. Conceptually, Spring generates the <code>HashMap</code> code of Step 1 around your method:</p>
+<pre><code><span class="kw">public</span> Product <span class="fn">getProduct</span>(Long id) {
+    Product cached = cache.<span class="attr">get</span>(id);
+    <span class="kw">if</span> (cached != <span class="kw">null</span>) {
+        <span class="kw">return</span> cached;
+    }
+    Product result = repository.<span class="attr">findById</span>(id);
+    cache.<span class="attr">put</span>(id, result);
+    <span class="kw">return</span> result;
+}</code></pre>
+<p>It does this through a <strong>proxy</strong> around the bean. The method body executes <strong>only on a cache miss</strong>. The cache name is <code>products</code>; the key is, by default, the method arguments - with a single argument, the key is that argument (<code>1</code>).</p>
+<h3 id="step4-provider-1-simple">Provider 1: simple (ConcurrentMapCacheManager)</h3>
+<pre><code><span class="tag">spring</span>:
+  <span class="tag">application</span>:
+    <span class="tag">name</span>: cache-java-meetup
+  <span class="tag">cache</span>:
+    <span class="tag">type</span>: simple</code></pre>
+<p>Restart. The startup log shows the provider:</p>
+<pre><code>CacheManager: ConcurrentMapCacheManager
+Native cache: java.util.concurrent.ConcurrentHashMap</code></pre>
+<div class="img-container">
+  <img src="images/step4-log-simple.png" alt="Startup log with ConcurrentMapCacheManager">
+  <div class="img-caption">Startup log with ConcurrentMapCacheManager</div>
+</div>
+<p>Run the two curls: 1 s, then 0 ms. We are back to Step 1 - a <code>ConcurrentHashMap</code>, no TTL, no bound - but the service method knows nothing about it.</p>
+<div class="callout note">
+  <div class="callout-label">&#128221; Checkpoint</div>
+<p>Tag <code>stage-08-cacheable-simple</code>.</p>
+</div>
+<h3 id="step4-provider-2-caffeine">Provider 2: Caffeine (CaffeineCacheManager)</h3>
+<p>Only <code>application.yaml</code> changes. The <code>spec</code> string is Caffeine's own <code>CaffeineSpec</code> format - the same policies we used in Step 2:</p>
+<pre><code><span class="tag">spring</span>:
+  <span class="tag">application</span>:
+    <span class="tag">name</span>: cache-java-meetup
+  <span class="tag">cache</span>:
+    <span class="tag">type</span>: caffeine
+    <span class="tag">caffeine</span>:
+      <span class="tag">spec</span>: maximumSize=10,expireAfterWrite=1m,recordStats</code></pre>
+<pre><code>CacheManager: CaffeineCacheManager
+Native cache: com.github.benmanes.caffeine.cache.BoundedLocalCache$BoundedLocalManualCache</code></pre>
+<div class="img-container">
+  <img src="images/step4-log-caffeine.png" alt="Startup log with CaffeineCacheManager">
+  <div class="img-caption">Startup log with CaffeineCacheManager</div>
+</div>
+<pre><code>@Cacheable  →  CaffeineCacheManager  →  Caffeine  →  JVM memory</code></pre>
+<p><strong>Not one line of Java changed.</strong></p>
+<div class="callout note">
+  <div class="callout-label">&#128221; Checkpoint</div>
+<p>Tag <code>stage-09-cacheable-caffeine</code>.</p>
+</div>
+<h3 id="step4-provider-3-redis">Provider 3: Redis (RedisCacheManager)</h3>
+<p>Switch the YAML once more:</p>
+<pre><code><span class="tag">spring</span>:
+  <span class="tag">application</span>:
+    <span class="tag">name</span>: cache-java-meetup
+  <span class="tag">cache</span>:
+    <span class="tag">type</span>: redis
+    <span class="tag">redis</span>:
+      <span class="tag">time-to-live</span>: 1m</code></pre>
+<p>This time a small configuration class is needed too, because <code>RedisCacheManager</code> defaults to JDK serialization (binary values, and a <code>Serializable</code> requirement our record does not meet). <code>CacheConfig.java</code>:</p>
+<pre><code><span class="kw">package</span> gr.skg.cachejavameetup;
+
+<span class="kw">import</span> org.springframework.boot.cache.autoconfigure.CacheProperties;
+<span class="kw">import</span> org.springframework.context.annotation.Bean;
+<span class="kw">import</span> org.springframework.context.annotation.Configuration;
+<span class="kw">import</span> org.springframework.data.redis.cache.RedisCacheConfiguration;
+<span class="kw">import</span> org.springframework.data.redis.serializer.JacksonJsonRedisSerializer;
+<span class="kw">import</span> org.springframework.data.redis.serializer.RedisSerializationContext;
+
+<span class="kw">import</span> java.time.Duration;
+
+<span class="ann">@Configuration</span>
+<span class="kw">public</span> <span class="kw">class</span> <span class="typ">CacheConfig</span> {
+
+   <span class="cm">// This is needed, as otherwise the default Serializable will store values</span>
+   <span class="cm">// as binary instead of json. Sometimes binary is preferred (for performance)</span>
+   <span class="ann">@Bean</span>
+   RedisCacheConfiguration <span class="fn">redisCacheConfiguration</span>(CacheProperties cacheProperties) {
+      <span class="kw">return</span> RedisCacheConfiguration.<span class="attr">defaultCacheConfig</span>()
+            .<span class="attr">entryTtl</span>(cacheProperties.<span class="attr">getRedis</span>().<span class="attr">getTimeToLive</span>()) <span class="cm">// inject property, otherwise -1!</span>
+            .<span class="attr">serializeValuesWith</span>(RedisSerializationContext.<span class="attr">SerializationPair</span>
+                  .<span class="attr">fromSerializer</span>(<span class="kw">new</span> JacksonJsonRedisSerializer&lt;&gt;(Product.<span class="attr">class</span>)));
+   }
+
+}</code></pre>
+<pre><code>CacheManager: RedisCacheManager
+Native cache: org.springframework.data.redis.cache.DefaultRedisCacheWriter</code></pre>
+<div class="img-container">
+  <img src="images/step4-log-redis.png" alt="Startup log with RedisCacheManager">
+  <div class="img-caption">Startup log with RedisCacheManager</div>
+</div>
+<pre><code>docker compose <span class="kw">exec</span> redis redis-cli FLUSHALL
+curl localhost:8080/products/1
+curl localhost:8080/products/1
+docker compose <span class="kw">exec</span> redis redis-cli KEYS <span class="str">&#x27;products::*&#x27;</span>
+docker compose <span class="kw">exec</span> redis redis-cli GET products::1
+docker compose <span class="kw">exec</span> redis redis-cli TTL products::1</code></pre>
+<pre><code>1) &quot;products::1&quot;
+&quot;{\&quot;id\&quot;:1,\&quot;name\&quot;:\&quot;iPhone 16\&quot;,\&quot;price\&quot;:1200.0}&quot;
+(integer) 54</code></pre>
+<div class="img-container">
+  <img src="images/step4-redis-insight-products-key.png" alt="Redis Insight Workbench: GET products::1 returns the JSON value written by RedisCacheManager">
+  <div class="img-caption">Redis Insight Workbench: GET products::1 returns the JSON value written by RedisCacheManager</div>
+</div>
+<p>Note the key format: <code>RedisCacheManager</code> uses <code>&lt;cacheName&gt;::&lt;key&gt;</code> → <code>products::1</code>, whereas our manual template used <code>product:1</code>. And the TTL is now 1 minute (from YAML) instead of the 10 minutes hard-coded in Step 3.</p>
+<div class="callout note">
+  <div class="callout-label">&#128221; Checkpoint</div>
+<p>Tag <code>stage-10-cacheable-redis</code>.</p>
+</div>
+<h3 id="step4-three-providers">Same Annotation, Three Providers</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th><code>application.yaml</code></th>
+<th>Startup log</th>
+<th>Values live in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>spring.cache.type: simple</code></td>
+<td><code>CacheManager: ConcurrentMapCacheManager</code></td>
+<td>JVM heap, unbounded</td>
+</tr>
+<tr>
+<td><code>spring.cache.type: caffeine</code> + <code>spec: maximumSize=10,expireAfterWrite=1m,recordStats</code></td>
+<td><code>CacheManager: CaffeineCacheManager</code></td>
+<td>JVM heap, bounded</td>
+</tr>
+<tr>
+<td><code>spring.cache.type: redis</code> + <code>time-to-live: 1m</code></td>
+<td><code>CacheManager: RedisCacheManager</code></td>
+<td>Remote shared cache</td>
+</tr>
+</tbody>
+</table></div>
+<pre><code>Local                          Distributed
+-----                          -----------
+@Cacheable                     @Cacheable
+   ↓                              ↓
+Caffeine                       Redis
+   ↓                              ↓
+JVM memory                     Remote shared cache</code></pre>
+<p>The Java method is identical while the operational characteristics change completely.</p>
+<h3 id="step4-boot-4-gotchas">Spring Boot 4 Gotchas</h3>
+<p>Each of these cost real debugging time while building the demo. All were verified against the Spring Boot 4.1.1 / Spring Data Redis 4.1.1 artifacts.</p>
+<div class="callout important">
+  <div class="callout-label">&#9888;&#65039; Important</div>
+<ol>
+<li><strong><code>spring-boot-starter-cache</code> is required.</strong> <code>@EnableCaching</code> alone gives you no <code>CacheManager</code> (see above).</li>
+<li><strong>Set <code>spring.cache.type</code> explicitly.</strong> The auto-detection order is Generic, JCache, Hazelcast, Infinispan, Couchbase, <strong>Redis</strong>, Cache2k, <strong>Caffeine</strong>, Simple. With both Redis and Caffeine on the classpath, an unset type silently picks Redis.</li>
+<li><strong><code>RedisCacheManager</code> defaults to <code>JdkSerializationRedisSerializer</code>.</strong> A record that is not <code>Serializable</code> fails at the first <code>put</code>. Either <code>implements Serializable</code> (binary values in Redis) or declare a <code>RedisCacheConfiguration</code> bean with a JSON serializer, as <code>CacheConfig</code> does.</li>
+<li><strong>A <code>RedisCacheConfiguration</code> bean disables the <code>spring.cache.redis.*</code> properties.</strong> Boot uses your bean as-is, so <code>time-to-live</code>, <code>key-prefix</code> and <code>cache-null-values</code> from YAML are ignored. <code>CacheConfig</code> injects <code>CacheProperties</code> and calls <code>entryTtl(cacheProperties.getRedis().getTimeToLive())</code> to keep YAML as the source of truth. Without that line, <code>TTL products::1</code> returns <code>-1</code> (never expires).</li>
+<li><strong>Jackson 3.</strong> Packages are <code>tools.jackson.*</code>, not <code>com.fasterxml.jackson.*</code>; the serializers are <code>JacksonJsonRedisSerializer</code> and <code>GenericJacksonJsonRedisSerializer</code>.</li>
+</ol>
+</div>
+<h3 id="step4-cache-keys">Cache Keys</h3>
+<p>The default key is the method arguments. With one argument the key is that argument; with several, Spring builds a <code>SimpleKey</code> from all of them. For anything non-trivial, be explicit with SpEL:</p>
+<pre><code><span class="ann">@Cacheable</span>(cacheNames = <span class="str">&quot;</span><span class="str">products</span><span class="str">&quot;</span>, key = <span class="str">&quot;</span><span class="str">#id</span><span class="str">&quot;</span>)
+<span class="kw">public</span> Product <span class="fn">getProduct</span>(Long id) { ... }
+
+<span class="ann">@Cacheable</span>(cacheNames = <span class="str">&quot;</span><span class="str">search</span><span class="str">&quot;</span>, key = <span class="str">&quot;</span><span class="str">#category + &#x27;:&#x27; + #page</span><span class="str">&quot;</span>)
+<span class="kw">public</span> List&lt;Product&gt; <span class="fn">search</span>(String category, <span class="typ">int</span> page) { ... }</code></pre>
+<div class="callout warning">
+  <div class="callout-label">&#9888;&#65039; Bad cache keys silently return logically incorrect results</div>
+<p>A wrong key is the worst cache bug because nothing fails - the response is just wrong. If two different calls can produce the same key, they will share a cached value.</p>
+</div>
+<h3 id="step4-hits-misses-optional">Optional: Seeing Every Hit and Miss</h3>
+<p>Two ways to watch the abstraction work, neither of which is committed in the demo:</p>
+<p><code>TRACE</code> logging on the cache interceptor:</p>
+<pre><code><span class="tag">logging</span>:
+  <span class="tag">level</span>:
+    <span class="tag">org.springframework.cache</span>: trace</code></pre>
+<pre><code>Computed cache key &#x27;1&#x27; for operation Builder[public gr.skg.cachejavameetup.Product gr.skg.cachejavameetup.ProductService.getProduct(java.lang.Long)] caches=[products] ...
+No cache entry for key &#x27;1&#x27; in cache(s) [products]
+Cache entry for key &#x27;1&#x27; found in cache(s) [products]</code></pre>
+<p>Or <code>spring-boot-starter-actuator</code> with <code>management.endpoints.web.exposure.include: health,caches</code>, and <code>GET /actuator/caches</code> lists every cache and its native class.</p>
+<hr />
+<h2 id="step5"><span class="step-badge">Step 5</span> Invalidation - The Stale-Data Bug, @CacheEvict and @CachePut</h2>
+<p>Storing a value is the easy part. This step adds an <em>update</em> operation and shows the bug that every cache eventually produces, then fixes it in two different ways. Keep the Redis provider from Step 4 so the stale value is visible in the UI.</p>
+<h3 id="step5-update-endpoint">An Update Endpoint Without Cache Annotations</h3>
+<p><code>ProductController</code> gets a <code>PUT</code>:</p>
+<pre><code><span class="ann">@PutMapping</span>(<span class="str">&quot;</span><span class="str">/{id}</span><span class="str">&quot;</span>)
+<span class="kw">public</span> Product <span class="fn">update</span>(<span class="ann">@PathVariable</span> Long id,
+                      <span class="ann">@RequestParam</span> Double newPrice) {
+   <span class="kw">return</span> productService.<span class="attr">update</span>(id, newPrice);
+}</code></pre>
+<p><code>ProductService</code> delegates:</p>
+<pre><code><span class="kw">public</span> Product <span class="fn">update</span>(Long id, Double newPrice) {
+   <span class="kw">return</span> productRepository.<span class="attr">update</span>(id, newPrice);
+}</code></pre>
+<p><code>ProductRepository</code> updates the price atomically (and goes through the 1-second <code>findById</code> first, for the delay and the not-found check):</p>
+<pre><code><span class="kw">public</span> Product <span class="fn">update</span>(Long id, Double newPrice) {
+   Product product = findById(id); <span class="cm">// not needed, but just for the &#x27;delay&#x27; and &#x27;not found&#x27;</span>
+
+   <span class="cm">// simulating atomic DB operation</span>
+   <span class="kw">return</span> db.<span class="attr">computeIfPresent</span>(id,
+         (key, existing)
+               -&gt; <span class="kw">new</span> Product(existing.<span class="attr">id</span>(), existing.<span class="attr">name</span>(), newPrice));
+}</code></pre>
+<h3 id="step5-the-bug">The Bug</h3>
+<pre><code>docker compose <span class="kw">exec</span> redis redis-cli FLUSHALL
+curl localhost:8080/products/1                              <span class="cm"># price 1200.0
+</span>curl -X PUT <span class="str">&quot;localhost:8080/products/1?newPrice=999&quot;</span>        <span class="cm"># returns price 999.0
+</span>curl localhost:8080/products/1                              <span class="cm"># STILL 1200.0
+</span></code></pre>
+<pre><code>{&quot;id&quot;:1,&quot;name&quot;:&quot;iPhone 16&quot;,&quot;price&quot;:1200.0}
+{&quot;id&quot;:1,&quot;name&quot;:&quot;iPhone 16&quot;,&quot;price&quot;:999.0}
+{&quot;id&quot;:1,&quot;name&quot;:&quot;iPhone 16&quot;,&quot;price&quot;:1200.0}      ← stale</code></pre>
+<div class="img-container">
+  <img src="images/step5-stale-bug.png" alt="GET (1 s 761 ms, a miss) → PUT (price 999.0) → GET (72 ms): the third response still says 1200.0">
+  <div class="img-caption">GET (1 s 761 ms, a miss) → PUT (price 999.0) → GET (72 ms): the third response still says 1200.0</div>
+</div>
+<pre><code>Database = 999.0
+Cache    = 1200.0</code></pre>
+<p>The database has the new price; the cache has the old one; the API returns the old one for up to a minute. This is the demo the audience remembers.</p>
+<div class="callout important">
+  <div class="callout-label">&#9888;&#65039; Cache invalidation is often harder than populating the cache</div>
+<p>The annotation on <code>getProduct</code> cannot know that <code>update</code> changed the data. Somebody has to tell the cache.</p>
+</div>
+<div class="callout note">
+  <div class="callout-label">&#128221; Checkpoint</div>
+<p>Tag <code>stage-11-update-stale</code>.</p>
+</div>
+<h3 id="step5-fix-1-cacheevict">Fix 1: @CacheEvict</h3>
+<p>One annotation on <code>ProductService.update</code> removes the entry when the write happens. The key expression <code>#id</code> refers to the method argument and resolves to the same key <code>1</code> that <code>@Cacheable</code> used:</p>
+<pre><code><span class="kw">package</span> gr.skg.cachejavameetup;
+
+<span class="kw">import</span> org.springframework.cache.annotation.CacheEvict;
+<span class="kw">import</span> org.springframework.cache.annotation.Cacheable;
+<span class="kw">import</span> org.springframework.stereotype.Service;
+
+<span class="ann">@Service</span>
+<span class="kw">public</span> <span class="kw">class</span> <span class="typ">ProductService</span> {
+   <span class="kw">private</span> <span class="kw">final</span> ProductRepository productRepository;
+
+   <span class="kw">public</span> <span class="fn">ProductService</span>(ProductRepository productRepository) {
+      <span class="kw">this</span>.<span class="attr">productRepository</span> = productRepository;
+   }
+
+   <span class="ann">@Cacheable</span>(<span class="str">&quot;</span><span class="str">products</span><span class="str">&quot;</span>)
+   <span class="kw">public</span> Product <span class="fn">getProduct</span>(Long id) {
+      <span class="kw">return</span> productRepository.<span class="attr">findById</span>(id);
+   }
+
+   <span class="ann">@CacheEvict</span>(cacheNames = <span class="str">&quot;</span><span class="str">products</span><span class="str">&quot;</span>, key = <span class="str">&quot;</span><span class="str">#id</span><span class="str">&quot;</span>)
+   <span class="kw">public</span> Product <span class="fn">update</span>(Long id, Double newPrice) {
+      <span class="kw">return</span> productRepository.<span class="attr">update</span>(id, newPrice);
+   }
+}</code></pre>
+<pre><code>curl localhost:8080/products/1                              <span class="cm"># 1200.0
+</span>curl -X PUT <span class="str">&quot;localhost:8080/products/1?newPrice=999&quot;</span>        <span class="cm"># 999.0, entry removed
+</span>curl -w <span class="str">&#x27;\n%{time_total}s\n&#x27;</span> localhost:8080/products/1      <span class="cm"># 999.0 after ~1 s (miss + reload)
+</span></code></pre>
+<div class="img-container">
+  <img src="images/step5-cacheevict.png" alt="With @CacheEvict: GET → PUT → GET returns 999.0, but takes 1 s 16 ms (miss + reload)">
+  <div class="img-caption">With @CacheEvict: GET → PUT → GET returns 999.0, but takes 1 s 16 ms (miss + reload)</div>
+</div>
+<p>In Redis Insight the key <code>products::1</code> disappears after the <code>PUT</code> and reappears after the <code>GET</code>. Correct - but the first read after every update pays the full price.</p>
+<div class="callout note">
+  <div class="callout-label">&#128221; Checkpoint</div>
+<p>Tag <code>stage-12-cacheevict</code>.</p>
+</div>
+<h3 id="step5-fix-2-cacheput">Fix 2: @CachePut</h3>
+<p><code>@CachePut</code> always runs the method and stores its result. The key expression <code>#result.id</code> shows that it can address the cache with the <em>returned</em> object rather than the argument:</p>
+<pre><code><span class="ann">@CachePut</span>(cacheNames = <span class="str">&quot;</span><span class="str">products</span><span class="str">&quot;</span>, key = <span class="str">&quot;</span><span class="str">#result.id</span><span class="str">&quot;</span>)
+<span class="kw">public</span> Product <span class="fn">update</span>(Long id, Double newPrice) {
+   <span class="kw">return</span> productRepository.<span class="attr">update</span>(id, newPrice);
+}</code></pre>
+<pre><code>curl localhost:8080/products/1                              <span class="cm"># 1200.0
+</span>curl -X PUT <span class="str">&quot;localhost:8080/products/1?newPrice=999&quot;</span>        <span class="cm"># 999.0, entry replaced
+</span>curl -w <span class="str">&#x27;\n%{time_total}s\n&#x27;</span> localhost:8080/products/1      <span class="cm"># 999.0 in ~0 ms (hit)
+</span></code></pre>
+<div class="img-container">
+  <img src="images/step5-cacheput.png" alt="With @CachePut: GET → PUT → GET returns 999.0 in 68 ms (hit)">
+  <div class="img-caption">With @CachePut: GET → PUT → GET returns 999.0 in 68 ms (hit)</div>
+</div>
+<p>Run the same three-call sequence on the three tags and narrate the third call: <strong>stale</strong>, then <strong>slow-but-correct</strong>, then <strong>fast-and-correct</strong>.</p>
+<div class="callout note">
+  <div class="callout-label">&#128221; Checkpoint</div>
+<p>Tag <code>stage-13-cacheput</code> - the final state of the repository.</p>
+</div>
+<h3 id="step5-the-three-annotations">The Three Annotations</h3>
+<pre><code>@Cacheable  → may skip method execution on a hit
+@CachePut   → always executes the method and stores the result
+@CacheEvict → removes the entry (or the whole cache with allEntries = true)</code></pre>
+<p>The annotations work on any Spring bean's public method called through the proxy - the demo puts them on the service, but a repository-level placement next to the write is equally valid. Keep <code>cacheNames</code> and <code>key</code> consistent with the matching <code>@Cacheable</code>.</p>
+<h3 id="step5-self-invocation-trap">The Self-Invocation Trap</h3>
+<p>The first thing to check when "the cache does not work":</p>
+<pre><code><span class="ann">@Service</span>
+<span class="kw">public</span> <span class="kw">class</span> <span class="typ">ProductService</span> {
+
+    <span class="kw">public</span> Product <span class="fn">load</span>(Long id) {
+        <span class="kw">return</span> getProduct(id);      <span class="cm">// this.getProduct(): bypasses the proxy</span>
+    }
+
+    <span class="ann">@Cacheable</span>(<span class="str">&quot;</span><span class="str">products</span><span class="str">&quot;</span>)
+    <span class="kw">public</span> Product <span class="fn">getProduct</span>(Long id) {
+        <span class="kw">return</span> repository.<span class="attr">findById</span>(id);
+    }
+}</code></pre>
+<p><code>load()</code> calls <code>this.getProduct()</code> directly. The cache advice lives on the <strong>proxy</strong>, and a call inside the same object never reaches the proxy, so the annotation is silently ignored. Same rule as <code>@Transactional</code>. Annotations are not magic.</p>
+<hr />
+<h2 id="step6"><span class="step-badge">Step 6</span> Beyond the Demo - Failure Modes and a Decision Framework</h2>
+<p>No code in this step. These are the things that decide whether a cache helps or hurts in production.</p>
+<h3 id="step6-failure-modes">Failure Modes</h3>
+<p><strong>Stale data</strong></p>
+<pre><code>12:00 Cache stores price = 1200
+12:01 Database changes price = 999
+12:02 User reads cache = 1200</code></pre>
+<p>How stale are we willing to be? That answer - a business answer, not a technical one - determines the TTL and the invalidation strategy.</p>
+<p><strong>Cache stampede / thundering herd.</strong> A popular key expires; 1,000 concurrent requests miss; 1,000 database calls. Mitigations: coordinated loading (Caffeine's <code>get(key, loader)</code> does this per key inside one JVM), single-flight locks across instances, jittered TTLs, <code>refreshAfterWrite</code>, stale-while-revalidate.</p>
+<p><strong>Unbounded cache.</strong></p>
+<pre><code>Map&lt;String, Object&gt; cache = <span class="kw">new</span> ConcurrentHashMap&lt;&gt;();</code></pre>
+<p>If every request creates a new key: 10k → 100k → 1M entries → <code>OutOfMemoryError</code>. The strongest argument for a real cache library.</p>
+<p><strong>Local cache inconsistency.</strong></p>
+<pre><code>Instance A cache: price = 1200
+Instance B cache: price = 999
+Database:         price = 999</code></pre>
+<p>Two users see two prices. Sometimes perfectly acceptable, sometimes not. <strong>Consistency is a business requirement, not automatically a technical one.</strong></p>
+<h3 id="step6-caffeine-vs-redis">Caffeine vs Redis</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th></th>
+<th>Caffeine</th>
+<th>Redis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Location</td>
+<td>JVM memory</td>
+<td>Remote process</td>
+</tr>
+<tr>
+<td>Latency</td>
+<td>Nanoseconds-microseconds</td>
+<td>Network round trip</td>
+</tr>
+<tr>
+<td>Shared between instances</td>
+<td>No</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Survives app restart</td>
+<td>No</td>
+<td>Yes (and a Redis restart too, with RDB)</td>
+</tr>
+<tr>
+<td>Serialization</td>
+<td>No</td>
+<td>Yes (JSON here, JDK by default)</td>
+</tr>
+<tr>
+<td>Operational complexity</td>
+<td>Low</td>
+<td>Higher</td>
+</tr>
+<tr>
+<td>Memory</td>
+<td>App heap</td>
+<td>Redis memory</td>
+</tr>
+<tr>
+<td>Best for</td>
+<td>Local hot data</td>
+<td>Shared / distributed cache</td>
+</tr>
+</tbody>
+</table></div>
+<div class="callout tip">
+  <div class="callout-label">&#128161; Redis is not automatically &quot;better&quot; because it is distributed</div>
+<p>If local inconsistency is acceptable for your data, Caffeine is dramatically simpler and cheaper.</p>
+</div>
+<p><strong>L1 + L2.</strong> The two are often combined:</p>
+<pre><code>Request → L1: Caffeine → miss → L2: Redis → miss → Database</code></pre>
+<p>Every extra cache level makes reads faster and invalidation harder. Redis Pub/Sub is the usual channel to invalidate L1 across instances.</p>
+<p><strong>Event-driven invalidation.</strong> In larger systems the cache stops <em>guessing</em> when data changed: a Change Data Capture tool such as <a href="https://debezium.io/">Debezium</a> streams every database commit as an event, and a small consumer evicts or refreshes the matching Redis key. Invalidation is then driven by the database itself, rather than by TTLs or by remembering to annotate every write path.</p>
+<div class="img-container">
+  <img src="images/step6-debezium.png" alt="Debezium reads the database change log and streams every commit through Kafka; a consumer per sink (Redis, Elasticsearch, analytics) reacts to the change">
+  <div class="img-caption">Debezium reads the database change log and streams every commit through Kafka; a consumer per sink (Redis, Elasticsearch, analytics) reacts to the change</div>
+</div>
+<h3 id="step6-should-we-cache-this">Should We Cache This?</h3>
+<ol>
+<li>Is the operation actually expensive?</li>
+<li>Is the same data requested repeatedly?</li>
+<li>How frequently does the data change?</li>
+<li>How stale may the result be?</li>
+<li>What is the acceptable failure mode?</li>
+<li>How many application instances are there?</li>
+<li>Is cache invalidation practical?</li>
+</ol>
+<p><strong>Do not cache by reflex. Measure first.</strong></p>
+<h3 id="step6-which-cache">Which Cache?</h3>
+<pre><code>Is the operation expensive and repeated?
+             |
+            yes
+             |
+Can cached data be local to one app instance?
+          /       \
+        yes        no
+        |           |
+    Caffeine      Redis
+        |           |
+        +-----+-----+
+              |
+Want declarative Spring integration?
+              |
+         Spring Cache
+         @Cacheable</code></pre>
+<p>A heuristic, not a law. Whichever provider you choose, the Spring abstraction lets you change your mind in YAML.</p>
+<p><strong>What TTL should I use?</strong> It depends on the business freshness requirement: a country list → hours or days; a product catalogue → minutes; stock availability → seconds, or no cache at all.</p>
+<hr />
+<h2 id="wrapup">Wrap-up</h2>
+<p>In this workshop we took one slow endpoint through every caching strategy a Java application is likely to use:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Step</th>
+<th>What We Built</th>
+<th>Key Concept</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>0</strong></td>
+<td>A deliberately slow repository</td>
+<td>The problem: 1 s per request, same answer every time</td>
+</tr>
+<tr>
+<td><strong>1</strong></td>
+<td><code>HashMap</code> → <code>ConcurrentHashMap</code></td>
+<td>Thread-safety, <code>computeIfAbsent</code>, unbounded growth</td>
+</tr>
+<tr>
+<td><strong>2</strong></td>
+<td>Caffeine</td>
+<td><code>maximumSize</code>, <code>expireAfterWrite</code>, stats, <code>LoadingCache</code>, <code>refreshAfterWrite</code></td>
+</tr>
+<tr>
+<td><strong>3</strong></td>
+<td>Redis by hand</td>
+<td>Shared cache, serialization, TTL, <code>redis-cli</code>, Redis UIs</td>
+</tr>
+<tr>
+<td><strong>4</strong></td>
+<td>Spring Cache</td>
+<td><code>@Cacheable</code>, <code>CacheManager</code>, simple / Caffeine / Redis in YAML</td>
+</tr>
+<tr>
+<td><strong>5</strong></td>
+<td>Invalidation</td>
+<td>Stale data, <code>@CacheEvict</code>, <code>@CachePut</code>, self-invocation</td>
+</tr>
+<tr>
+<td><strong>6</strong></td>
+<td>Beyond the demo</td>
+<td>Failure modes, Caffeine vs Redis, decision framework</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="wrapup-key-takeaways">Key Takeaways</h3>
+<ol>
+<li><strong>A cache is not just a Map.</strong> Production caches need policies: memory, expiration, eviction, concurrency, observability.</li>
+<li><strong>Local and distributed caches solve different problems.</strong> Caffeine = fastest + local. Redis = shared + distributed.</li>
+<li><strong><code>@Cacheable</code> is an abstraction.</strong> It moves the caching code out of the business method and into configuration. It does not remove invalidation, staleness, TTL decisions, consistency or stampedes.</li>
+</ol>
+<blockquote>
+<p>The easiest part of caching is storing the value. The engineering challenge is deciding when that value stops being correct.</p>
+</blockquote>
+<div class="callout note">
+  <div class="callout-label">&#128221; Source Code</div>
+<p><a href="https://github.com/LefterisXris/java-caching-meetup-demo">LefterisXris/java-caching-meetup-demo</a> - 14 commits, one per stage, tagged <code>stage-00-no-cache</code> … <code>stage-13-cacheput</code>. Start Redis with <code>docker compose up -d</code>; Redis Commander on <code>:8081</code>, Redis Insight on <code>:5540</code>.</p>
+</div>
+<h3 id="wrapup-resources">Resources</h3>
+<ul>
+<li><a href="https://docs.spring.io/spring-framework/reference/integration/cache.html">Spring Framework - Cache Abstraction</a></li>
+<li><a href="https://docs.spring.io/spring-boot/reference/io/caching.html">Spring Boot - Caching</a></li>
+<li><a href="https://github.com/ben-manes/caffeine">Caffeine - GitHub &amp; wiki</a></li>
+<li><a href="https://highscalability.com/design-of-a-modern-cache/">Caffeine - Design of a Modern Cache (Ben Manes)</a></li>
+<li><a href="https://docs.spring.io/spring-data/redis/reference/">Spring Data Redis - Reference</a></li>
+<li><a href="https://redis.io/docs/latest/commands/">Redis - Commands reference</a></li>
+<li><a href="https://redis.io/insight/">Redis Insight</a></li>
+<li><a href="https://debezium.io/">Debezium</a></li>
+<li><a href="https://www.baeldung.com/spring-cache-tutorial">Baeldung - Spring Cache Guide</a></li>
+<li><a href="https://www.baeldung.com/java-caching-caffeine">Baeldung - Caffeine</a></li>
+<li><a href="https://www.baeldung.com/spring-boot-redis-cache">Baeldung - Spring Boot Redis Cache</a></li>
+</ul>
+
+<!-- ====== GET INVOLVED ====== -->
+<hr>
+
+<h2 id="community">Get Involved</h2>
+
+<div class="community-banner">
+  <img src="images/skg-java-logo.png" alt="SKG Java Community" class="community-logo">
+  <div>
+    <h3>SKG Java Community</h3>
+    <p class="community-tagline">Explore &middot; Learn &middot; Engage &middot; Socialize</p>
+    <p style="margin-bottom: 12px;">Our community brings developers together through technical talks, hands-on sessions, networking, and open discussions in a friendly environment.</p>
+    <ul style="list-style: none; padding: 0; margin: 0; font-size: 0.9rem; line-height: 2;">
+      <li>&#127908; <a href="https://forms.gle/9Hq5bJnYZuHsBBn16">Submit a talk or suggest a topic</a></li>
+      <li>&#128161; <a href="https://trello.com/b/9uQt5Tex/topics-voting">Vote for topics in the backlog</a></li>
+      <li>&#128187; <a href="https://github.com/skg-java-community/meetups">GitHub Repo</a></li>
+      <li>&#129309; <a href="https://www.facebook.com/ThessalonikiJavaMeetup">Facebook Page</a></li>
+      <li>&#128150; <a href="https://opencollective.com/skgjug/contribute/meetup-event-sponsor-94613">Sponsorship &amp; Donations</a></li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout tip">
+  <div class="callout-label">&#129309; Sponsorship</div>
+  <p>A big thanks to all our sponsors who have supported our events! We are always looking to welcome new sponsors and collaborators. If your company would like to support our community, host a meetup, or collaborate on events, please <a href="https://opencollective.com/skgjug/contribute/meetup-event-sponsor-94613">reach out to us</a>. Your involvement helps us keep the SKG Java Community active, inclusive, and growing!</p>
+</div>
+
+</main>
+
+</div><!-- /page-body -->
+
+<footer class="site-footer">
+  <img src="images/skg-java-logo.png" alt="SKG Java Community" class="footer-logo">
+  <div class="footer-slogan">Explore &middot; Learn &middot; Engage &middot; Socialize</div>
+  <div class="footer-quote">"Never stop learning, because life never stops teaching."</div>
+  <div class="footer-links">
+    <a href="https://www.meetup.com/thessaloniki-not-only-java/">Meetup</a>
+    <a href="https://github.com/skg-java-community/meetups">GitHub</a>
+    <a href="https://www.facebook.com/ThessalonikiJavaMeetup">Facebook</a>
+    <a href="https://opencollective.com/skgjug/contribute/meetup-event-sponsor-94613">Sponsor Us</a>
+  </div>
+</footer>
+
+<!-- Settings Toggle -->
+<button class="settings-toggle" id="settingsToggle" title="Customize appearance">&#9881;</button>
+
+<!-- Settings Panel -->
+<div class="settings-panel" id="settingsPanel">
+  <h4>Appearance</h4>
+
+  <label>Theme</label>
+  <div class="theme-buttons">
+    <button class="theme-btn active" data-theme="light">Light</button>
+    <button class="theme-btn" data-theme="dark">Dark</button>
+    <button class="theme-btn" data-theme="sepia">Sepia</button>
+  </div>
+
+  <label>Font Family</label>
+  <select id="fontSelect">
+    <option value="'Inter', system-ui, sans-serif">Inter (default)</option>
+    <option value="'Source Sans 3', sans-serif">Source Sans</option>
+    <option value="'Merriweather', serif">Merriweather (serif)</option>
+    <option value="Georgia, serif">Georgia</option>
+    <option value="system-ui, sans-serif">System UI</option>
+  </select>
+
+  <label>Font Size: <span class="font-size-display" id="fontSizeDisplay">17px</span></label>
+  <input type="range" id="fontSizeRange" min="14" max="22" value="17" step="1">
+
+  <label>Content Width</label>
+  <select id="widthSelect">
+    <option value="720px">Narrow (720px)</option>
+    <option value="860px" selected>Default (860px)</option>
+    <option value="1040px">Wide (1040px)</option>
+  </select>
+
+  <label>Line Height</label>
+  <select id="lineHeightSelect">
+    <option value="1.5">Compact (1.5)</option>
+    <option value="1.7" selected>Default (1.7)</option>
+    <option value="1.9">Relaxed (1.9)</option>
+  </select>
+</div>
+
+<!-- Back to top -->
+<button class="back-to-top" id="backToTop" title="Back to top">&#8593;</button>
+
+<!-- Lightbox -->
+<div class="lightbox-overlay" id="lightbox">
+  <div class="lightbox-toolbar">
+    <button id="lbZoomOut" title="Zoom out">&#8722;</button>
+    <span class="lightbox-zoom-level" id="lbZoomLevel">100%</span>
+    <button id="lbZoomIn" title="Zoom in">&#43;</button>
+    <button id="lbReset" title="Reset zoom">&#8634;</button>
+    <button id="lbClose" title="Close (Esc)">&#10005;</button>
+  </div>
+  <div class="lightbox-viewport" id="lbViewport">
+    <img id="lbImg" src="" alt="">
+  </div>
+  <div class="lightbox-hint" id="lbHint">Scroll to zoom &middot; Drag to pan &middot; Esc to close</div>
+</div>
+
+<script>
+// --- Lightbox ---
+(function() {
+  const overlay = document.getElementById('lightbox');
+  const viewport = document.getElementById('lbViewport');
+  const img = document.getElementById('lbImg');
+  const zoomLevelEl = document.getElementById('lbZoomLevel');
+  const hint = document.getElementById('lbHint');
+
+  let scale = 1, panX = 0, panY = 0;
+  let isDragging = false, dragStartX = 0, dragStartY = 0, panStartX = 0, panStartY = 0;
+  let naturalW = 0, naturalH = 0;
+
+  function updateTransform() {
+    const scaledW = naturalW * scale;
+    const scaledH = naturalH * scale;
+    const x = panX - scaledW / 2;
+    const y = panY - scaledH / 2;
+    img.style.transform = 'translate(' + x + 'px, ' + y + 'px) scale(' + scale + ')';
+    zoomLevelEl.textContent = Math.round(scale * 100) + '%';
+  }
+
+  function resetView() {
+    const vw = viewport.clientWidth, vh = viewport.clientHeight;
+    const fitScale = Math.min(vw / naturalW, vh / naturalH, 1) * 0.92;
+    scale = fitScale;
+    panX = vw / 2;
+    panY = vh / 2;
+    updateTransform();
+  }
+
+  function openLightbox(src) {
+    overlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    hint.classList.remove('hidden');
+    setTimeout(() => hint.classList.add('hidden'), 3000);
+
+    const doReset = () => {
+      naturalW = img.naturalWidth;
+      naturalH = img.naturalHeight;
+      resetView();
+    };
+
+    if (img.src === src && img.complete && img.naturalWidth) {
+      doReset();
+    } else {
+      img.onload = doReset;
+      img.src = src;
+    }
+  }
+
+  function closeLightbox() {
+    overlay.classList.remove('open');
+    document.body.style.overflow = '';
+    img.src = '';
+  }
+
+  function zoom(delta, cx, cy) {
+    if (!cx) cx = viewport.clientWidth / 2;
+    if (!cy) cy = viewport.clientHeight / 2;
+    const prevScale = scale;
+    scale = Math.min(Math.max(scale * (1 + delta), 0.15), 8);
+    const ratio = scale / prevScale;
+    panX = cx - (cx - panX) * ratio;
+    panY = cy - (cy - panY) * ratio;
+    updateTransform();
+  }
+
+  // Open on image click
+  document.querySelectorAll('.img-container img').forEach(i => {
+    i.addEventListener('click', () => openLightbox(i.src));
+  });
+
+  // Close
+  document.getElementById('lbClose').addEventListener('click', closeLightbox);
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeLightbox(); });
+  viewport.addEventListener('click', e => { if (e.target === viewport) closeLightbox(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && overlay.classList.contains('open')) closeLightbox(); });
+
+  // Toolbar buttons
+  document.getElementById('lbZoomIn').addEventListener('click', () => zoom(0.25));
+  document.getElementById('lbZoomOut').addEventListener('click', () => zoom(-0.2));
+  document.getElementById('lbReset').addEventListener('click', resetView);
+
+  // Scroll to zoom
+  viewport.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = viewport.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+    const delta = e.deltaY < 0 ? 0.15 : -0.13;
+    zoom(delta, cx, cy);
+  }, { passive: false });
+
+  // Drag to pan
+  viewport.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    isDragging = true;
+    dragStartX = e.clientX; dragStartY = e.clientY;
+    panStartX = panX; panStartY = panY;
+    viewport.classList.add('dragging');
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    panX = panStartX + (e.clientX - dragStartX);
+    panY = panStartY + (e.clientY - dragStartY);
+    updateTransform();
+  });
+  window.addEventListener('mouseup', () => {
+    isDragging = false;
+    viewport.classList.remove('dragging');
+  });
+
+  // Touch support
+  let lastTouchDist = 0;
+  let touchMoved = false;
+  viewport.addEventListener('touchstart', e => {
+    touchMoved = false;
+    if (e.touches.length === 1) {
+      isDragging = true;
+      dragStartX = e.touches[0].clientX; dragStartY = e.touches[0].clientY;
+      panStartX = panX; panStartY = panY;
+    } else if (e.touches.length === 2) {
+      isDragging = false;
+      touchMoved = true;
+      lastTouchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    }
+    e.preventDefault();
+  }, { passive: false });
+  viewport.addEventListener('touchmove', e => {
+    touchMoved = true;
+    if (e.touches.length === 1 && isDragging) {
+      panX = panStartX + (e.touches[0].clientX - dragStartX);
+      panY = panStartY + (e.touches[0].clientY - dragStartY);
+      updateTransform();
+    } else if (e.touches.length === 2) {
+      const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+      const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - viewport.getBoundingClientRect().left;
+      const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - viewport.getBoundingClientRect().top;
+      const delta = (dist - lastTouchDist) / lastTouchDist;
+      zoom(delta, cx, cy);
+      lastTouchDist = dist;
+    }
+    e.preventDefault();
+  }, { passive: false });
+  viewport.addEventListener('touchend', e => {
+    isDragging = false;
+    // Tap outside image to close (no drag occurred)
+    if (!touchMoved && e.changedTouches.length === 1) {
+      const touch = e.changedTouches[0];
+      const imgRect = img.getBoundingClientRect();
+      if (touch.clientX < imgRect.left || touch.clientX > imgRect.right ||
+          touch.clientY < imgRect.top || touch.clientY > imgRect.bottom) {
+        closeLightbox();
+      }
+    }
+  });
+
+  // Double-click to toggle zoom
+  viewport.addEventListener('dblclick', e => {
+    const rect = viewport.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+    if (scale > 1.1) {
+      resetView();
+    } else {
+      zoom(1.5, cx, cy);
+    }
+  });
+})();
+
+// --- Copy buttons on code blocks ---
+document.querySelectorAll('pre').forEach(pre => {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'code-wrapper';
+  pre.parentNode.insertBefore(wrapper, pre);
+  wrapper.appendChild(pre);
+
+  const btn = document.createElement('button');
+  btn.className = 'copy-btn';
+  btn.textContent = 'Copy';
+  btn.addEventListener('click', () => {
+    const code = pre.querySelector('code') || pre;
+    navigator.clipboard.writeText(code.textContent).then(() => {
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = 'Copy';
+        btn.classList.remove('copied');
+      }, 2000);
+    });
+  });
+  wrapper.appendChild(btn);
+});
+
+// --- Sidebar ---
+const sidebar = document.getElementById('sidebar');
+const sidebarCollapseBtn = document.getElementById('sidebarCollapseBtn');
+const sidebarOpenBtn = document.getElementById('sidebarOpenBtn');
+const sidebarOverlay = document.getElementById('sidebarOverlay');
+const isMobile = () => window.innerWidth <= 1024;
+
+function collapseSidebar() {
+  sidebar.classList.add('collapsed');
+  sidebar.classList.remove('mobile-open');
+  sidebarOpenBtn.classList.add('visible');
+  sidebarOverlay.classList.remove('visible');
+}
+function expandSidebar() {
+  if (isMobile()) {
+    sidebar.classList.remove('collapsed');
+    sidebar.classList.add('mobile-open');
+    sidebarOverlay.classList.add('visible');
+  } else {
+    sidebar.classList.remove('collapsed');
+    sidebarOpenBtn.classList.remove('visible');
+  }
+}
+
+sidebarCollapseBtn.addEventListener('click', collapseSidebar);
+sidebarOpenBtn.addEventListener('click', expandSidebar);
+sidebarOverlay.addEventListener('click', collapseSidebar);
+
+// Sub-nav toggle
+document.querySelectorAll('[data-toggle]').forEach(link => {
+  link.addEventListener('click', e => {
+    e.preventDefault();
+    const targetId = link.getAttribute('data-toggle');
+    const subNav = document.getElementById(targetId);
+    const arrow = link.querySelector('.expand-arrow');
+    subNav.classList.toggle('expanded');
+    if (arrow) arrow.classList.toggle('rotated');
+  });
+});
+
+// Click nav link -> close sidebar on mobile
+document.querySelectorAll('.sidebar-nav a[href]').forEach(link => {
+  link.addEventListener('click', () => {
+    if (isMobile()) collapseSidebar();
+  });
+});
+
+// Active section tracking
+const navLinks = document.querySelectorAll('.sidebar-nav a[href^="#"]');
+const sections = [];
+navLinks.forEach(link => {
+  const id = link.getAttribute('href').slice(1);
+  const el = document.getElementById(id);
+  if (el) sections.push({ el, link });
+});
+
+function updateActiveNav() {
+  let current = sections[0];
+  const scrollY = window.scrollY + 120;
+  for (const s of sections) {
+    if (s.el.offsetTop <= scrollY) current = s;
+  }
+  navLinks.forEach(l => l.classList.remove('active'));
+  if (current) {
+    current.link.classList.add('active');
+    // Auto-expand parent sub-nav
+    const parentSubNav = current.link.closest('.sub-nav');
+    if (parentSubNav && !parentSubNav.classList.contains('expanded')) {
+      parentSubNav.classList.add('expanded');
+      const parentToggle = document.querySelector('[data-toggle="' + parentSubNav.id + '"]');
+      if (parentToggle) {
+        const arrow = parentToggle.querySelector('.expand-arrow');
+        if (arrow) arrow.classList.add('rotated');
+      }
+    }
+  }
+}
+window.addEventListener('scroll', updateActiveNav);
+updateActiveNav();
+
+// --- Settings panel ---
+const toggle = document.getElementById('settingsToggle');
+const panel = document.getElementById('settingsPanel');
+toggle.addEventListener('click', () => panel.classList.toggle('open'));
+
+// Theme
+document.querySelectorAll('.theme-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const theme = btn.dataset.theme;
+    if (theme === 'light') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', theme);
+  });
+});
+
+// Font family
+document.getElementById('fontSelect').addEventListener('change', e => {
+  document.documentElement.style.setProperty('--font-body', e.target.value);
+});
+
+// Font size
+const fontRange = document.getElementById('fontSizeRange');
+const fontDisplay = document.getElementById('fontSizeDisplay');
+fontRange.addEventListener('input', () => {
+  const val = fontRange.value + 'px';
+  fontDisplay.textContent = val;
+  document.documentElement.style.setProperty('--font-size-base', val);
+});
+
+// Content width
+document.getElementById('widthSelect').addEventListener('change', e => {
+  document.documentElement.style.setProperty('--max-width', e.target.value);
+});
+
+// Line height
+document.getElementById('lineHeightSelect').addEventListener('change', e => {
+  document.documentElement.style.setProperty('--line-height', e.target.value);
+});
+
+// Progress bar
+const progressBar = document.getElementById('progressBar');
+window.addEventListener('scroll', () => {
+  const winH = document.documentElement.scrollHeight - window.innerHeight;
+  const pct = (window.scrollY / winH) * 100;
+  progressBar.style.width = pct + '%';
+});
+
+// Back to top
+const btt = document.getElementById('backToTop');
+window.addEventListener('scroll', () => {
+  btt.classList.toggle('visible', window.scrollY > 600);
+});
+btt.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+
+// Close settings panel on outside click
+document.addEventListener('click', e => {
+  if (!panel.contains(e.target) && e.target !== toggle) panel.classList.remove('open');
+});
+
+// Handle resize
+window.addEventListener('resize', () => {
+  if (!isMobile()) {
+    sidebar.classList.remove('mobile-open');
+    sidebarOverlay.classList.remove('visible');
+    if (!sidebar.classList.contains('collapsed')) {
+      sidebarOpenBtn.classList.remove('visible');
+    }
+  }
+});
+
+</script>
+</body>
+</html>
