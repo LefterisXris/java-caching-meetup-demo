@@ -1167,7 +1167,7 @@ h2, h3 { scroll-margin-top: 24px; }
 <ul>
 <li><strong>Java 21+</strong> and <strong>Maven 3.9+</strong> (or an IDE with a bundled Maven, such as IntelliJ IDEA)</li>
 <li><strong>Docker</strong> (Docker Desktop or any Docker engine with <code>docker compose</code>) - needed from Step 3 onwards, for Redis</li>
-<li><strong>curl</strong> (Git Bash on Windows works fine), or the IntelliJ HTTP client</li>
+<li><strong>curl</strong> (Git Bash on Windows works fine), or the IntelliJ HTTP client - the screenshots use the latter</li>
 <li>An IDE - IntelliJ IDEA is used in the screenshots</li>
 </ul>
 <h3 id="intro-how-to-use-this-guide">How to Use This Guide</h3>
@@ -1184,7 +1184,13 @@ h2, h3 { scroll-margin-top: 24px; }
   <div class="callout-label">&#128161; Timing a request</div>
 <p>The single most useful command of this workshop measures how long a request takes. Keep it in a terminal:</p>
 <pre><code>curl -w <span class="str">&#x27;\n%{time_total}s\n&#x27;</span> localhost:8080/products/1</code></pre>
-<p>The IntelliJ HTTP client shows the same duration next to the response status.</p>
+<p>The commands in this guide are written as <code>curl</code> so they work anywhere. The screenshots use the <strong>IntelliJ HTTP client</strong> instead (a scratch <code>.http</code> file): it shows the same duration next to the response status, and it can run one request several times in a row - handy for "call it three times and compare":</p>
+<pre><code>### loop - many times
+&lt; {%
+  request.variables.set(&quot;products&quot;, [1,1,1])
+%}
+GET http://localhost:8080/products/{{$.products}}</code></pre>
+<p>The request is executed once per value in the array, and the <strong>Services</strong> tool window lists every run with its response time.</p>
 </div>
 <hr />
 <h2 id="step0"><span class="step-badge">Step 0</span> Project Scaffold and a Deliberately Slow Repository</h2>
@@ -1330,8 +1336,8 @@ curl -w <span class="str">&#x27;\n%{time_total}s\n&#x27;</span> localhost:8080/p
 {&quot;id&quot;:1,&quot;name&quot;:&quot;iPhone&quot;,&quot;price&quot;:1200.0}
 1.006s</code></pre>
 <div class="img-container">
-  <img src="images/step0-curl-slow.png" alt="Three requests, one second each">
-  <div class="img-caption">Three requests, one second each</div>
+  <img src="images/step0-curl-slow.png" alt="Three requests for the same product in the IntelliJ HTTP client: 1 s 15 ms, 1 s 21 ms, 1 s 11 ms">
+  <div class="img-caption">Three requests for the same product in the IntelliJ HTTP client: 1 s 15 ms, 1 s 21 ms, 1 s 11 ms</div>
 </div>
 <p>Every request takes ~1 second, and every request produces the same answer. This is the question for the rest of the workshop:</p>
 <blockquote>
@@ -1394,10 +1400,10 @@ curl -w <span class="str">&#x27;\n%{time_total}s\n&#x27;</span> localhost:8080/p
 {&quot;id&quot;:1,&quot;name&quot;:&quot;iPhone&quot;,&quot;price&quot;:1200.0}
 0.004s</code></pre>
 <div class="img-container">
-  <img src="images/step1-hashmap-hit.png" alt="First request one second, second request instant">
-  <div class="img-caption">First request one second, second request instant</div>
+  <img src="images/step1-hashmap-hit.png" alt="The same three requests with the HashMap: 1 s 209 ms, then 8 ms and 7 ms">
+  <div class="img-caption">The same three requests with the HashMap: 1 s 209 ms, then 8 ms and 7 ms</div>
 </div>
-<p>First call ~1 s, second call ~0 ms. <strong>So… are we done?</strong></p>
+<p>First call ~1 s, every call after that a few milliseconds. <strong>So… are we done?</strong></p>
 <h3 id="step1-what-is-wrong">What Is Wrong With the HashMap Cache?</h3>
 <ul>
 <li><code>HashMap</code> is <strong>not thread-safe</strong> - concurrent <code>put</code>s can corrupt it</li>
@@ -1518,26 +1524,28 @@ Cache&lt;Long, Product&gt; cache = Caffeine.<span class="attr">newBuilder</span>
 <span class="kw">public</span> String <span class="fn">cacheStats</span>() {
    <span class="kw">return</span> productService.<span class="attr">cache</span>.<span class="attr">stats</span>().<span class="attr">toString</span>();
 }</code></pre>
-<p>Restart and try it:</p>
+<p>Restart, request product 1 three times, then ask for the statistics:</p>
 <pre><code>curl localhost:8080/products/1
 curl localhost:8080/products/1
+curl localhost:8080/products/1
 curl localhost:8080/products/cache/stats</code></pre>
-<pre><code>CacheStats{hitCount=1, missCount=1, loadSuccessCount=1, loadFailureCount=0, totalLoadTime=1003456789, evictionCount=0, evictionWeight=0}</code></pre>
+<pre><code>CacheStats{hitCount=2, missCount=1, loadSuccessCount=1, loadFailureCount=0, totalLoadTime=1010992200, evictionCount=0, evictionWeight=0}</code></pre>
 <div class="img-container">
-  <img src="images/step2-cache-stats.png" alt="Cache statistics after one miss and one hit">
-  <div class="img-caption">Cache statistics after one miss and one hit</div>
+  <img src="images/step2-cache-stats.png" alt="Cache statistics after the three-request loop: one miss, two hits, one load of ~1 s">
+  <div class="img-caption">Cache statistics after the three-request loop: one miss, two hits, one load of ~1 s</div>
 </div>
-<p>Now exceed <code>maximumSize(10)</code>: request ids 1 to 11 and watch the console.</p>
+<p>One miss, two hits, one load that took about a second (<code>totalLoadTime</code> is in nanoseconds). Now watch an entry <em>leave</em>. The simplest way is expiration: request product 1, wait a little more than a minute (<code>expireAfterWrite(1m)</code>), and request it again. The second request finds an expired entry, evicts it, reloads it - and the listener prints:</p>
+<pre><code>Evicting product: 1</code></pre>
+<div class="img-container">
+  <img src="images/step2-eviction-log.png" alt="The eviction listener fires on the first request after the entry expired">
+  <div class="img-caption">The eviction listener fires on the first request after the entry expired</div>
+</div>
+<p>The other way is size: the repository still returns a product for any id, so requesting ids 1 to 11 exceeds <code>maximumSize(10)</code> and one of them is evicted.</p>
 <pre><code><span class="kw">for</span> id <span class="kw">in</span> <span class="kw">$(</span>seq <span class="num">1</span> <span class="num">11</span><span class="kw">)</span>; <span class="kw">do</span> curl -s localhost:8080/products/<span class="prop">$id</span> &gt; /dev/null; <span class="kw">done</span>
 curl localhost:8080/products/cache</code></pre>
-<pre><code>Evicting product: 3</code></pre>
-<div class="img-container">
-  <img src="images/step2-eviction-log.png" alt="Eviction listener output in the console">
-  <div class="img-caption">Eviction listener output in the console</div>
-</div>
 <div class="callout warning">
   <div class="callout-label">&#9888;&#65039; Caffeine evicts lazily and asynchronously</div>
-<p>The <code>Evicting product: …</code> line may appear on a <em>later</em> request rather than exactly on the 11th, and which key gets evicted depends on the frequency sketch, not on insertion order. The same is true for expiration: an entry that expired at 1:00 is removed (and the listener called) on the next read or write, not by a timer. If you wait for the log line without making a request, it will not appear.</p>
+<p>An entry that expired at 1:00 is removed (and the listener called) on the <em>next read or write</em>, not by a timer - if you wait for the log line without making a request, it will not appear. Likewise the size-based <code>Evicting product: …</code> line may appear on a later request rather than exactly on the 11th, and which key gets evicted depends on the frequency sketch, not on insertion order.</p>
 </div>
 <p><code>recordStats</code> is what turns a cache from a hope into something measurable: hit ratio, load count, evictions. In production these numbers go to Micrometer (<code>CaffeineCacheMetrics</code>), not to <code>System.out</code>.</p>
 <div class="callout note">
@@ -1650,12 +1658,12 @@ App A  App B  App C</code></pre>
 docker compose <span class="kw">exec</span> redis redis-cli ping     <span class="cm"># PONG
 </span></code></pre>
 <div class="img-container">
-  <img src="images/step3-docker-compose.png" alt="Redis container running">
-  <div class="img-caption">Redis container running</div>
+  <img src="images/step3-docker-compose.png" alt="compose.yaml deployed from IntelliJ's Services window, and PONG from redis-cli">
+  <div class="img-caption">compose.yaml deployed from IntelliJ's Services window, and PONG from redis-cli</div>
 </div>
 <div class="callout tip">
   <div class="callout-label">&#128161; Tip</div>
-<p>IntelliJ's <strong>Services</strong> tool window shows the compose services with <em>Deploy / Restart / Stop / Down</em> actions. <em>Restart</em> keeps the container (and its data); <em>Down</em> deletes it. Spring Boot's Docker Compose support (<code>spring-boot-docker-compose</code>) could start Redis automatically, but we keep it explicit here so it is clear what is running.</p>
+<p>IntelliJ's <strong>Services</strong> tool window shows the compose services with <em>Deploy / Restart / Stop / Down</em> actions (the run icon in the gutter of <code>compose.yaml</code> does the same as <code>docker compose up -d</code>). <em>Restart</em> keeps the container (and its data); <em>Down</em> deletes it. Spring Boot's Docker Compose support (<code>spring-boot-docker-compose</code>) could start Redis automatically, but we keep it explicit here so it is clear what is running.</p>
 </div>
 <h3 id="step3-dependency">Add the Dependency</h3>
 <pre><code><span class="tag">&lt;dependency</span><span class="tag">&gt;</span>
@@ -1814,18 +1822,14 @@ curl -w <span class="str">&#x27;\n%{time_total}s\n&#x27;</span> localhost:8080/p
 <pre><code>&quot;GET&quot; &quot;product:1&quot;
 &quot;SET&quot; &quot;product:1&quot; &quot;{\&quot;id\&quot;:1,\&quot;name\&quot;:\&quot;iPhone 16\&quot;,\&quot;price\&quot;:1200.0}&quot; &quot;PX&quot; &quot;600000&quot;
 &quot;GET&quot; &quot;product:1&quot;</code></pre>
-<div class="img-container">
-  <img src="images/step3-redis-monitor.png" alt="MONITOR output: GET, SET with TTL, then GET only">
-  <div class="img-caption">MONITOR output: GET, SET with TTL, then GET only</div>
-</div>
 <p>Inspect the value and its remaining lifetime:</p>
 <pre><code>docker compose <span class="kw">exec</span> redis redis-cli GET product:1
 docker compose <span class="kw">exec</span> redis redis-cli TTL product:1</code></pre>
 <pre><code>&quot;{\&quot;id\&quot;:1,\&quot;name\&quot;:\&quot;iPhone 16\&quot;,\&quot;price\&quot;:1200.0}&quot;
 (integer) 587</code></pre>
 <div class="img-container">
-  <img src="images/step3-redis-cli-get.png" alt="Product stored as JSON with a TTL">
-  <div class="img-caption">Product stored as JSON with a TTL</div>
+  <img src="images/step3-redis-monitor.png" alt="Top: MONITOR while the application serves two requests (GET, SET … PX 600000, GET). Bottom: the same commands replayed by hand in redis-cli -- GET returns (nil) before the SET and the JSON after it">
+  <div class="img-caption">Top: MONITOR while the application serves two requests (GET, SET … PX 600000, GET). Bottom: the same commands replayed by hand in redis-cli -- GET returns (nil) before the SET and the JSON after it</div>
 </div>
 <p>Now <strong>restart the application</strong> and request product 1 again: still a hit, ~0 ms. Caffeine would have lost everything; the cache now outlives the process.</p>
 <div class="callout note">
@@ -1866,15 +1870,15 @@ docker compose <span class="kw">exec</span> redis redis-cli TTL product:1</code>
 <li><strong>Redis Commander</strong> (<a href="http://localhost:8081">localhost:8081</a>): a tree of keys, values, TTL and a built-in CLI. The lightest option, zero onboarding.</li>
 </ul>
 <div class="img-container">
-  <img src="images/step3-redis-commander.png" alt="Redis Commander showing the product keys">
-  <div class="img-caption">Redis Commander showing the product keys</div>
+  <img src="images/step3-redis-commander.png" alt="Redis Commander: the product:* keys as a tree, with a CLI at the bottom">
+  <div class="img-caption">Redis Commander: the product:* keys as a tree, with a CLI at the bottom</div>
 </div>
 <ul>
 <li><strong>Redis Insight</strong> (<a href="http://localhost:5540">localhost:5540</a>): add a database with the connection URL <code>redis://default@redis:6379</code>. Richer: Browser, Workbench (CLI with autocomplete), Analyze (memory by key prefix, slow log) and Profiler (<code>MONITOR</code> with a UI).</li>
 </ul>
 <div class="img-container">
-  <img src="images/step3-redis-insight.png" alt="Redis Insight browser with product:1 as JSON">
-  <div class="img-caption">Redis Insight browser with product:1 as JSON</div>
+  <img src="images/step3-redis-insight.png" alt="Redis Insight browser: the product keys grouped by prefix, each with its remaining TTL and size">
+  <div class="img-caption">Redis Insight browser: the product keys grouped by prefix, each with its remaining TTL and size</div>
 </div>
 <div class="callout tip">
   <div class="callout-label">&#128161; Tip</div>
@@ -2091,8 +2095,8 @@ docker compose <span class="kw">exec</span> redis redis-cli TTL products::1</cod
 &quot;{\&quot;id\&quot;:1,\&quot;name\&quot;:\&quot;iPhone 16\&quot;,\&quot;price\&quot;:1200.0}&quot;
 (integer) 54</code></pre>
 <div class="img-container">
-  <img src="images/step4-redis-insight-products-key.png" alt="products::1 in Redis Insight with JSON value and TTL">
-  <div class="img-caption">products::1 in Redis Insight with JSON value and TTL</div>
+  <img src="images/step4-redis-insight-products-key.png" alt="Redis Insight Workbench: GET products::1 returns the JSON value written by RedisCacheManager">
+  <div class="img-caption">Redis Insight Workbench: GET products::1 returns the JSON value written by RedisCacheManager</div>
 </div>
 <p>Note the key format: <code>RedisCacheManager</code> uses <code>&lt;cacheName&gt;::&lt;key&gt;</code> → <code>products::1</code>, whereas our manual template used <code>product:1</code>. And the TTL is now 1 minute (from YAML) instead of the 10 minutes hard-coded in Step 3.</p>
 <div class="callout note">
@@ -2200,8 +2204,8 @@ curl localhost:8080/products/1                              <span class="cm"># p
 {&quot;id&quot;:1,&quot;name&quot;:&quot;iPhone 16&quot;,&quot;price&quot;:999.0}
 {&quot;id&quot;:1,&quot;name&quot;:&quot;iPhone 16&quot;,&quot;price&quot;:1200.0}      ← stale</code></pre>
 <div class="img-container">
-  <img src="images/step5-stale-bug.png" alt="GET, PUT, GET: the third response is stale">
-  <div class="img-caption">GET, PUT, GET: the third response is stale</div>
+  <img src="images/step5-stale-bug.png" alt="GET (1 s 761 ms, a miss) → PUT (price 999.0) → GET (72 ms): the third response still says 1200.0">
+  <div class="img-caption">GET (1 s 761 ms, a miss) → PUT (price 999.0) → GET (72 ms): the third response still says 1200.0</div>
 </div>
 <pre><code>Database = 999.0
 Cache    = 1200.0</code></pre>
@@ -2245,8 +2249,8 @@ Cache    = 1200.0</code></pre>
 </span>curl -w <span class="str">&#x27;\n%{time_total}s\n&#x27;</span> localhost:8080/products/1      <span class="cm"># 999.0 after ~1 s (miss + reload)
 </span></code></pre>
 <div class="img-container">
-  <img src="images/step5-cacheevict.png" alt="After @CacheEvict the next GET is correct but slow">
-  <div class="img-caption">After @CacheEvict the next GET is correct but slow</div>
+  <img src="images/step5-cacheevict.png" alt="With @CacheEvict: GET → PUT → GET returns 999.0, but takes 1 s 16 ms (miss + reload)">
+  <div class="img-caption">With @CacheEvict: GET → PUT → GET returns 999.0, but takes 1 s 16 ms (miss + reload)</div>
 </div>
 <p>In Redis Insight the key <code>products::1</code> disappears after the <code>PUT</code> and reappears after the <code>GET</code>. Correct - but the first read after every update pays the full price.</p>
 <div class="callout note">
@@ -2264,8 +2268,8 @@ Cache    = 1200.0</code></pre>
 </span>curl -w <span class="str">&#x27;\n%{time_total}s\n&#x27;</span> localhost:8080/products/1      <span class="cm"># 999.0 in ~0 ms (hit)
 </span></code></pre>
 <div class="img-container">
-  <img src="images/step5-cacheput.png" alt="After @CachePut the next GET is correct and instant">
-  <div class="img-caption">After @CachePut the next GET is correct and instant</div>
+  <img src="images/step5-cacheput.png" alt="With @CachePut: GET → PUT → GET returns 999.0 in 68 ms (hit)">
+  <div class="img-caption">With @CachePut: GET → PUT → GET returns 999.0 in 68 ms (hit)</div>
 </div>
 <p>Run the same three-call sequence on the three tags and narrate the third call: <strong>stale</strong>, then <strong>slow-but-correct</strong>, then <strong>fast-and-correct</strong>.</p>
 <div class="callout note">
@@ -2370,6 +2374,10 @@ Database:         price = 999</code></pre>
 <pre><code>Request → L1: Caffeine → miss → L2: Redis → miss → Database</code></pre>
 <p>Every extra cache level makes reads faster and invalidation harder. Redis Pub/Sub is the usual channel to invalidate L1 across instances.</p>
 <p><strong>Event-driven invalidation.</strong> In larger systems the cache stops <em>guessing</em> when data changed: a Change Data Capture tool such as <a href="https://debezium.io/">Debezium</a> streams every database commit as an event, and a small consumer evicts or refreshes the matching Redis key. Invalidation is then driven by the database itself, rather than by TTLs or by remembering to annotate every write path.</p>
+<div class="img-container">
+  <img src="images/step6-debezium.png" alt="Debezium reads the database change log and streams every commit through Kafka; a consumer per sink (Redis, Elasticsearch, analytics) reacts to the change">
+  <div class="img-caption">Debezium reads the database change log and streams every commit through Kafka; a consumer per sink (Redis, Elasticsearch, analytics) reacts to the change</div>
+</div>
 <h3 id="step6-should-we-cache-this">Should We Cache This?</h3>
 <ol>
 <li>Is the operation actually expensive?</li>

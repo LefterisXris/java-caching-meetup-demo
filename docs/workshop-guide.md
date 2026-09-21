@@ -50,7 +50,7 @@ This workshop was presented at the **SKG Java Meetup** on **Wednesday, September
 
 - **Java 21+** and **Maven 3.9+** (or an IDE with a bundled Maven, such as IntelliJ IDEA)
 - **Docker** (Docker Desktop or any Docker engine with `docker compose`) -- needed from Step 3 onwards, for Redis
-- **curl** (Git Bash on Windows works fine), or the IntelliJ HTTP client
+- **curl** (Git Bash on Windows works fine), or the IntelliJ HTTP client -- the screenshots use the latter
 - An IDE -- IntelliJ IDEA is used in the screenshots
 
 ### How to Use This Guide
@@ -76,7 +76,17 @@ You can follow the guide in two ways:
 > curl -w '\n%{time_total}s\n' localhost:8080/products/1
 > ```
 >
-> The IntelliJ HTTP client shows the same duration next to the response status.
+> The commands in this guide are written as `curl` so they work anywhere. The screenshots use the **IntelliJ HTTP client** instead (a scratch `.http` file): it shows the same duration next to the response status, and it can run one request several times in a row -- handy for "call it three times and compare":
+>
+> ```text
+> ### loop - many times
+> < {%
+>   request.variables.set("products", [1,1,1])
+> %}
+> GET http://localhost:8080/products/{{$.products}}
+> ```
+>
+> The request is executed once per value in the array, and the **Services** tool window lists every run with its response time.
 
 ---
 
@@ -215,7 +225,7 @@ curl -w '\n%{time_total}s\n' localhost:8080/products/1
 1.006s
 ```
 
-![Three requests, one second each](images/step0-curl-slow.png)
+![Three requests for the same product in the IntelliJ HTTP client: 1 s 15 ms, 1 s 21 ms, 1 s 11 ms](images/step0-curl-slow.png)
 
 Every request takes ~1 second, and every request produces the same answer. This is the question for the rest of the workshop:
 
@@ -300,9 +310,9 @@ curl -w '\n%{time_total}s\n' localhost:8080/products/1
 0.004s
 ```
 
-![First request one second, second request instant](images/step1-hashmap-hit.png)
+![The same three requests with the HashMap: 1 s 209 ms, then 8 ms and 7 ms](images/step1-hashmap-hit.png)
 
-First call ~1 s, second call ~0 ms. **So… are we done?**
+First call ~1 s, every call after that a few milliseconds. **So… are we done?**
 
 ### What Is Wrong With the HashMap Cache?
 
@@ -455,35 +465,38 @@ public String cacheStats() {
 }
 ```
 
-Restart and try it:
+Restart, request product 1 three times, then ask for the statistics:
 
 ```bash
+curl localhost:8080/products/1
 curl localhost:8080/products/1
 curl localhost:8080/products/1
 curl localhost:8080/products/cache/stats
 ```
 
 ```text
-CacheStats{hitCount=1, missCount=1, loadSuccessCount=1, loadFailureCount=0, totalLoadTime=1003456789, evictionCount=0, evictionWeight=0}
+CacheStats{hitCount=2, missCount=1, loadSuccessCount=1, loadFailureCount=0, totalLoadTime=1010992200, evictionCount=0, evictionWeight=0}
 ```
 
-![Cache statistics after one miss and one hit](images/step2-cache-stats.png)
+![Cache statistics after the three-request loop: one miss, two hits, one load of ~1 s](images/step2-cache-stats.png)
 
-Now exceed `maximumSize(10)`: request ids 1 to 11 and watch the console.
+One miss, two hits, one load that took about a second (`totalLoadTime` is in nanoseconds). Now watch an entry *leave*. The simplest way is expiration: request product 1, wait a little more than a minute (`expireAfterWrite(1m)`), and request it again. The second request finds an expired entry, evicts it, reloads it -- and the listener prints:
+
+```text
+Evicting product: 1
+```
+
+![The eviction listener fires on the first request after the entry expired](images/step2-eviction-log.png)
+
+The other way is size: the repository still returns a product for any id, so requesting ids 1 to 11 exceeds `maximumSize(10)` and one of them is evicted.
 
 ```bash
 for id in $(seq 1 11); do curl -s localhost:8080/products/$id > /dev/null; done
 curl localhost:8080/products/cache
 ```
 
-```text
-Evicting product: 3
-```
-
-![Eviction listener output in the console](images/step2-eviction-log.png)
-
 > [!WARNING]
-> **Caffeine evicts lazily and asynchronously.** The `Evicting product: …` line may appear on a *later* request rather than exactly on the 11th, and which key gets evicted depends on the frequency sketch, not on insertion order. The same is true for expiration: an entry that expired at 1:00 is removed (and the listener called) on the next read or write, not by a timer. If you wait for the log line without making a request, it will not appear.
+> **Caffeine evicts lazily and asynchronously.** An entry that expired at 1:00 is removed (and the listener called) on the *next read or write*, not by a timer -- if you wait for the log line without making a request, it will not appear. Likewise the size-based `Evicting product: …` line may appear on a later request rather than exactly on the 11th, and which key gets evicted depends on the frequency sketch, not on insertion order.
 
 `recordStats` is what turns a cache from a hope into something measurable: hit ratio, load count, evictions. In production these numbers go to Micrometer (`CaffeineCacheMetrics`), not to `System.out`.
 
@@ -600,10 +613,10 @@ docker compose up -d
 docker compose exec redis redis-cli ping     # PONG
 ```
 
-![Redis container running](images/step3-docker-compose.png)
+![compose.yaml deployed from IntelliJ's Services window, and PONG from redis-cli](images/step3-docker-compose.png)
 
 > [!TIP]
-> IntelliJ's **Services** tool window shows the compose services with *Deploy / Restart / Stop / Down* actions. *Restart* keeps the container (and its data); *Down* deletes it. Spring Boot's Docker Compose support (`spring-boot-docker-compose`) could start Redis automatically, but we keep it explicit here so it is clear what is running.
+> IntelliJ's **Services** tool window shows the compose services with *Deploy / Restart / Stop / Down* actions (the run icon in the gutter of `compose.yaml` does the same as `docker compose up -d`). *Restart* keeps the container (and its data); *Down* deletes it. Spring Boot's Docker Compose support (`spring-boot-docker-compose`) could start Redis automatically, but we keep it explicit here so it is clear what is running.
 
 ### Add the Dependency
 
@@ -801,8 +814,6 @@ The first request shows a `GET` (miss) followed by a `SET … PX 600000`; the se
 "GET" "product:1"
 ```
 
-![MONITOR output: GET, SET with TTL, then GET only](images/step3-redis-monitor.png)
-
 Inspect the value and its remaining lifetime:
 
 ```bash
@@ -815,7 +826,7 @@ docker compose exec redis redis-cli TTL product:1
 (integer) 587
 ```
 
-![Product stored as JSON with a TTL](images/step3-redis-cli-get.png)
+![Top: MONITOR while the application serves two requests (GET, SET … PX 600000, GET). Bottom: the same commands replayed by hand in redis-cli -- GET returns (nil) before the SET and the JSON after it](images/step3-redis-monitor.png)
 
 Now **restart the application** and request product 1 again: still a hit, ~0 ms. Caffeine would have lost everything; the cache now outlives the process.
 
@@ -861,11 +872,11 @@ docker compose up -d      # picks up the two new services
 
 - **Redis Commander** ([localhost:8081](http://localhost:8081)): a tree of keys, values, TTL and a built-in CLI. The lightest option, zero onboarding.
 
-![Redis Commander showing the product keys](images/step3-redis-commander.png)
+![Redis Commander: the product:* keys as a tree, with a CLI at the bottom](images/step3-redis-commander.png)
 
 - **Redis Insight** ([localhost:5540](http://localhost:5540)): add a database with the connection URL `redis://default@redis:6379`. Richer: Browser, Workbench (CLI with autocomplete), Analyze (memory by key prefix, slow log) and Profiler (`MONITOR` with a UI).
 
-![Redis Insight browser with product:1 as JSON](images/step3-redis-insight.png)
+![Redis Insight browser: the product keys grouped by prefix, each with its remaining TTL and size](images/step3-redis-insight.png)
 
 > [!TIP]
 > Inside a container, `127.0.0.1` is the container itself. That is why the connection URL uses the compose service name `redis`, not `localhost`.
@@ -1150,7 +1161,7 @@ docker compose exec redis redis-cli TTL products::1
 (integer) 54
 ```
 
-![products::1 in Redis Insight with JSON value and TTL](images/step4-redis-insight-products-key.png)
+![Redis Insight Workbench: GET products::1 returns the JSON value written by RedisCacheManager](images/step4-redis-insight-products-key.png)
 
 Note the key format: `RedisCacheManager` uses `<cacheName>::<key>` → `products::1`, whereas our manual template used `product:1`. And the TTL is now 1 minute (from YAML) instead of the 10 minutes hard-coded in Step 3.
 
@@ -1277,7 +1288,7 @@ curl localhost:8080/products/1                              # STILL 1200.0
 {"id":1,"name":"iPhone 16","price":1200.0}      ← stale
 ```
 
-![GET, PUT, GET: the third response is stale](images/step5-stale-bug.png)
+![GET (1 s 761 ms, a miss) → PUT (price 999.0) → GET (72 ms): the third response still says 1200.0](images/step5-stale-bug.png)
 
 ```text
 Database = 999.0
@@ -1329,7 +1340,7 @@ curl -X PUT "localhost:8080/products/1?newPrice=999"        # 999.0, entry remov
 curl -w '\n%{time_total}s\n' localhost:8080/products/1      # 999.0 after ~1 s (miss + reload)
 ```
 
-![After @CacheEvict the next GET is correct but slow](images/step5-cacheevict.png)
+![With @CacheEvict: GET → PUT → GET returns 999.0, but takes 1 s 16 ms (miss + reload)](images/step5-cacheevict.png)
 
 In Redis Insight the key `products::1` disappears after the `PUT` and reappears after the `GET`. Correct -- but the first read after every update pays the full price.
 
@@ -1353,7 +1364,7 @@ curl -X PUT "localhost:8080/products/1?newPrice=999"        # 999.0, entry repla
 curl -w '\n%{time_total}s\n' localhost:8080/products/1      # 999.0 in ~0 ms (hit)
 ```
 
-![After @CachePut the next GET is correct and instant](images/step5-cacheput.png)
+![With @CachePut: GET → PUT → GET returns 999.0 in 68 ms (hit)](images/step5-cacheput.png)
 
 Run the same three-call sequence on the three tags and narrate the third call: **stale**, then **slow-but-correct**, then **fast-and-correct**.
 
@@ -1454,6 +1465,8 @@ Request → L1: Caffeine → miss → L2: Redis → miss → Database
 Every extra cache level makes reads faster and invalidation harder. Redis Pub/Sub is the usual channel to invalidate L1 across instances.
 
 **Event-driven invalidation.** In larger systems the cache stops *guessing* when data changed: a Change Data Capture tool such as [Debezium](https://debezium.io/) streams every database commit as an event, and a small consumer evicts or refreshes the matching Redis key. Invalidation is then driven by the database itself, rather than by TTLs or by remembering to annotate every write path.
+
+![Debezium reads the database change log and streams every commit through Kafka; a consumer per sink (Redis, Elasticsearch, analytics) reacts to the change](images/step6-debezium.png)
 
 ### Should We Cache This?
 
